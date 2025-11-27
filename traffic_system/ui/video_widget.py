@@ -53,6 +53,11 @@ class VideoWidget(QWidget):
         self.total_frames = 0
         self.video_fps = 30.0
         
+        # Drag state for circle calibration
+        self.is_dragging_circle = False
+        self.drag_center = None
+        self.drag_radius = 0
+        
         # FPS calculation
         self.last_frame_time = time.time()
         self.actual_fps = 0.0
@@ -79,6 +84,8 @@ class VideoWidget(QWidget):
         # Enable mouse tracking for calibration
         self.video_label.setMouseTracking(True)
         self.video_label.mousePressEvent = self.mouse_press_event
+        self.video_label.mouseMoveEvent = self.mouse_move_event
+        self.video_label.mouseReleaseEvent = self.mouse_release_event
         
         layout.addWidget(self.video_label)
     
@@ -297,52 +304,73 @@ class VideoWidget(QWidget):
         if frame is None:
             return
         
+        # Make a copy to draw on
+        display_frame = frame.copy()
+        
         # If calibrating road region, draw calibration points
         if self.is_calibrating:
-            frame = self.calibration.draw_points(frame)
+            display_frame = self.calibration.draw_points(display_frame)
+            
+            # Draw circle preview when dragging
+            if self.is_dragging_circle and self.drag_center and self.drag_radius > 0:
+                cv2.circle(display_frame, self.drag_center, self.drag_radius, (0, 255, 0), 2)
+                # Draw radius line
+                edge_point = (self.drag_center[0] + self.drag_radius, self.drag_center[1])
+                cv2.line(display_frame, self.drag_center, edge_point, (0, 255, 255), 1)
+                # Show radius value
+                radius_text = f"R = {self.drag_radius} px"
+                cv2.putText(display_frame, radius_text, 
+                           (self.drag_center[0] + 10, self.drag_center[1] - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             
             # Draw instruction based on mode
             required = self.calibration.get_required_points()
             current_points = len(self.calibration.get_points())
             points_left = required - current_points
             
-            if points_left > 0:
-                mode = self.calibration.get_mode()
-                from ..core.calibration import CalibrationMode
-                
-                if mode == CalibrationMode.POLYGON:
-                    text = f"Click {points_left} diem nua de hoan tat VUNG QUAN SAT"
-                elif mode == CalibrationMode.CIRCLE:
-                    if current_points == 0:
-                        text = "Click chon TAM VONG XOAY"
-                    else:
-                        text = "Click chon diem tren BAN KINH"
-                elif mode == CalibrationMode.ELLIPSE:
-                    if current_points == 0:
-                        text = "Click chon TAM VONG XOAY"
-                    elif current_points == 1:
-                        text = "Click chon diem tren TRUC CHINH"
-                    else:
-                        text = "Click chon diem tren TRUC PHU"
+            mode = self.calibration.get_mode()
+            from ..core.calibration import CalibrationMode
+            
+            if mode == CalibrationMode.CIRCLE:
+                if self.is_dragging_circle:
+                    text = "Keo chuot de chon BAN KINH - Tha chuot de hoan tat"
+                elif current_points == 0:
+                    text = "Click va keo de ve VONG TRON (giu chuot keo ra)"
                 else:
-                    text = f"Click {points_left} diem nua"
-                
-                cv2.putText(frame, text, (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    text = "Da chon vong tron"
+            elif mode == CalibrationMode.POLYGON:
+                if points_left > 0:
+                    text = f"Click {points_left} diem nua de hoan tat VUNG QUAN SAT"
+                else:
+                    text = "Da chon vung quan sat"
+            elif mode == CalibrationMode.ELLIPSE:
+                if current_points == 0:
+                    text = "Click chon TAM VONG XOAY"
+                elif current_points == 1:
+                    text = "Click chon diem tren TRUC CHINH"
+                elif current_points == 2:
+                    text = "Click chon diem tren TRUC PHU"
+                else:
+                    text = "Da chon elip"
+            else:
+                text = f"Click {points_left} diem nua"
+            
+            cv2.putText(display_frame, text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         
         # If calibrating traffic light ROI
         elif self.is_calibrating_traffic_light:
-            frame = self.traffic_light_detector.draw_points(frame)
+            display_frame = self.traffic_light_detector.draw_points(display_frame)
             
             # Draw instruction
             points_left = 4 - len(self.traffic_light_detector.get_points())
             if points_left > 0:
                 text = f"Click {points_left} diem nua de chon VUNG DEN GIAO THONG"
-                cv2.putText(frame, text, (10, 30),
+                cv2.putText(display_frame, text, (10, 30),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
         
         # Convert to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rgb_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         
@@ -365,6 +393,11 @@ class VideoWidget(QWidget):
         self.is_calibrating_traffic_light = False
         self.calibration.reset()
         self.pause()
+        
+        # Reset drag state
+        self.is_dragging_circle = False
+        self.drag_center = None
+        self.drag_radius = 0
         
         # Show first frame for calibration
         if self.current_frame is not None:
@@ -394,36 +427,35 @@ class VideoWidget(QWidget):
         
         if event.button() == Qt.MouseButton.LeftButton:
             # Get click position relative to image
-            label_size = self.video_label.size()
-            pixmap = self.video_label.pixmap()
+            click_x, click_y = self._get_image_coords(event.pos())
             
-            if pixmap is None:
+            if click_x is None:
                 return
-            
-            # Calculate scaling
-            pixmap_size = pixmap.size()
-            scale_x = self.current_frame.shape[1] / pixmap_size.width()
-            scale_y = self.current_frame.shape[0] / pixmap_size.height()
-            
-            # Calculate offset (image is centered in label)
-            offset_x = (label_size.width() - pixmap_size.width()) / 2
-            offset_y = (label_size.height() - pixmap_size.height()) / 2
-            
-            # Get click position in image coordinates
-            click_x = int((event.pos().x() - offset_x) * scale_x)
-            click_y = int((event.pos().y() - offset_y) * scale_y)
             
             # Ensure within bounds
             if 0 <= click_x < self.current_frame.shape[1] and 0 <= click_y < self.current_frame.shape[0]:
                 
                 if self.is_calibrating:
+                    from ..core.calibration import CalibrationMode
+                    mode = self.calibration.get_mode()
+                    
+                    # For circle mode, start drag operation
+                    if mode == CalibrationMode.CIRCLE and len(self.calibration.get_points()) == 0:
+                        self.is_dragging_circle = True
+                        self.drag_center = (click_x, click_y)
+                        self.drag_radius = 0
+                        # Add center point
+                        self.calibration.add_point(click_x, click_y)
+                        self.display_frame(self.current_frame)
+                        return
+                    
                     # Add road calibration point
                     complete = self.calibration.add_point(click_x, click_y)
                     
                     # Update display
                     self.display_frame(self.current_frame)
                     
-                    # If 4 points added, ask for dimensions
+                    # If points complete, ask for dimensions
                     if complete:
                         self.finish_calibration()
                 
@@ -437,6 +469,82 @@ class VideoWidget(QWidget):
                     # If 4 points added, finish
                     if complete:
                         self.finish_traffic_light_calibration()
+    
+    def mouse_move_event(self, event):
+        """Handle mouse move for circle drag calibration"""
+        if not self.is_dragging_circle or self.current_frame is None:
+            return
+        
+        # Get current position
+        mouse_x, mouse_y = self._get_image_coords(event.pos())
+        
+        if mouse_x is None:
+            return
+        
+        # Calculate radius from center
+        if self.drag_center:
+            dx = mouse_x - self.drag_center[0]
+            dy = mouse_y - self.drag_center[1]
+            self.drag_radius = int(np.sqrt(dx*dx + dy*dy))
+            
+            # Update calibration manager's radius for preview
+            self.calibration.radius = self.drag_radius
+            
+            # Update display with circle preview
+            self.display_frame(self.current_frame)
+    
+    def mouse_release_event(self, event):
+        """Handle mouse release for circle drag calibration"""
+        if not self.is_dragging_circle:
+            return
+        
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Get release position
+            release_x, release_y = self._get_image_coords(event.pos())
+            
+            if release_x is not None and self.drag_center:
+                # Calculate final radius
+                dx = release_x - self.drag_center[0]
+                dy = release_y - self.drag_center[1]
+                self.drag_radius = int(np.sqrt(dx*dx + dy*dy))
+                
+                # Minimum radius check
+                if self.drag_radius < 10:
+                    self.drag_radius = 10
+                
+                # Add edge point to complete circle
+                edge_x = self.drag_center[0] + self.drag_radius
+                edge_y = self.drag_center[1]
+                complete = self.calibration.add_point(edge_x, edge_y)
+                
+                self.is_dragging_circle = False
+                self.display_frame(self.current_frame)
+                
+                if complete:
+                    self.finish_calibration()
+    
+    def _get_image_coords(self, pos):
+        """Convert widget position to image coordinates"""
+        label_size = self.video_label.size()
+        pixmap = self.video_label.pixmap()
+        
+        if pixmap is None or self.current_frame is None:
+            return None, None
+        
+        # Calculate scaling
+        pixmap_size = pixmap.size()
+        scale_x = self.current_frame.shape[1] / pixmap_size.width()
+        scale_y = self.current_frame.shape[0] / pixmap_size.height()
+        
+        # Calculate offset (image is centered in label)
+        offset_x = (label_size.width() - pixmap_size.width()) / 2
+        offset_y = (label_size.height() - pixmap_size.height()) / 2
+        
+        # Get position in image coordinates
+        img_x = int((pos.x() - offset_x) * scale_x)
+        img_y = int((pos.y() - offset_y) * scale_y)
+        
+        return img_x, img_y
     
     def finish_calibration(self):
         """Finish calibration by asking for dimensions"""
