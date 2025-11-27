@@ -1,0 +1,43 @@
+{
+  "model": {
+    "model_path": "Model/best_v2.pt",
+    "conf_threshold": 0.5,
+    "iou_threshold": 0.55,
+    "detection_conf_filter": 0.4,
+    "imgsz": 640
+  },
+  "tracker": {
+    "max_age": 20,
+    "n_init": 3,
+    "max_iou_distance": 0.7,
+    "max_cosine_distance": 0.25,
+    "nn_budget": 70,
+    "embedder": "mobilenet",
+    "embedder_gpu": true
+  },
+  "calibration": {
+    "require_real_dimensions": true,
+    "default_road_length": 50.0,
+    "default_road_width": 10.0,
+    "use_perspective_transform": true,
+    "enable_save": true,
+    "profiles_dir": "calibration_profiles"
+  },
+  "video": {
+    "frame_skip": 1,
+    "fps_limit": null,
+    "process_resize_width": null,
+    "wait_key_ms": 30
+  },
+  "display": {
+    "info_panel_height": 380,
+    "font_scale_title": 0.6,
+    "font_scale_text": 0.5,
+    "font_scale_value": 0.6,
+    "font_scale_status": 0.9,
+    "font_thickness": 2,
+    "font_thickness_thin": 1,
+    "show_vehicle_dimensions": true,
+    "show_area_metrics": true
+  }
+}
