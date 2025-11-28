@@ -25,6 +25,24 @@ class CalibrationMode(Enum):
 
 
 @dataclass
+class LaneData:
+    """Data structure for a single lane"""
+    lane_id: int
+    points: List[Tuple[int, int]]
+    road_length_meters: float
+    road_width_meters: float
+    road_area_meters: float
+    polygon: Optional[List[Tuple[int, int]]] = None
+    
+    def to_dict(self) -> dict:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(**data)
+
+
+@dataclass
 class CalibrationData:
     """Calibration data structure"""
     points: List[Tuple[int, int]]
@@ -39,6 +57,9 @@ class CalibrationData:
     radius: Optional[int] = None  # For circle mode
     axes: Optional[Tuple[int, int]] = None  # For ellipse mode (major, minor)
     angle: float = 0.0  # Rotation angle for ellipse
+    # Multi-lane support
+    num_lanes: int = 1  # Number of lanes
+    lanes: Optional[List[dict]] = None  # List of LaneData for each lane
     
     def to_dict(self) -> dict:
         """Convert to dictionary"""
@@ -47,6 +68,8 @@ class CalibrationData:
             data['homography_matrix'] = self.homography_matrix
         if self.traffic_light_roi is not None:
             data['traffic_light_roi'] = self.traffic_light_roi
+        if self.lanes is not None:
+            data['lanes'] = self.lanes
         return data
     
     @classmethod
@@ -66,6 +89,10 @@ class CalibrationData:
             data['axes'] = None
         if 'angle' not in data:
             data['angle'] = 0.0
+        if 'num_lanes' not in data:
+            data['num_lanes'] = 1
+        if 'lanes' not in data:
+            data['lanes'] = None
         return cls(**data)
 
 
@@ -86,6 +113,12 @@ class CalibrationManager:
         self.axes: Optional[Tuple[int, int]] = None  # (major, minor) axes
         self.angle: float = 0.0
         
+        # Multi-lane support
+        self.num_lanes: int = 1
+        self.current_lane: int = 0  # 0-indexed
+        self.lanes_data: List[dict] = []  # Stores LaneData for each completed lane
+        self.all_polygons: List[np.ndarray] = []  # Polygons for all lanes
+        
         # Ensure profiles directory exists
         os.makedirs(profiles_dir, exist_ok=True)
     
@@ -94,6 +127,24 @@ class CalibrationManager:
         self.mode = mode
         self.reset()
         logger.info(f"Calibration mode set to: {mode.value}")
+    
+    def set_num_lanes(self, num_lanes: int):
+        """Set number of lanes for calibration"""
+        self.num_lanes = max(1, min(num_lanes, 2))  # Limit 1-2 lanes
+        self.reset()
+        logger.info(f"Number of lanes set to: {self.num_lanes}")
+    
+    def get_num_lanes(self) -> int:
+        """Get number of lanes"""
+        return self.num_lanes
+    
+    def get_current_lane(self) -> int:
+        """Get current lane being calibrated (1-indexed for display)"""
+        return self.current_lane + 1
+    
+    def is_all_lanes_calibrated(self) -> bool:
+        """Check if all lanes have been calibrated"""
+        return len(self.lanes_data) >= self.num_lanes
     
     def get_mode(self) -> CalibrationMode:
         """Get current calibration mode"""
@@ -231,7 +282,7 @@ class CalibrationManager:
             use_perspective: Calculate homography matrix (only for polygon mode)
         
         Returns:
-            True if successful
+            True if calibration is complete, False if more lanes need calibration
         """
         required = self.get_required_points()
         if len(self.calibration_points) != required:
@@ -248,41 +299,79 @@ class CalibrationManager:
         else:
             road_area = road_length * road_width
         
-        # Calculate homography if requested (only for polygon)
-        homography = None
-        if use_perspective and self.mode == CalibrationMode.POLYGON:
-            homography = self._calculate_homography(road_length, road_width)
-        
-        # Create calibration data
-        self.calibration = CalibrationData(
-            points=self.calibration_points.copy(),
-            road_length_meters=road_length,
-            road_width_meters=road_width,
-            road_area_meters=road_area,
-            homography_matrix=homography.tolist() if homography is not None else None,
-            calibration_mode=self.mode.value,
-            center=self.center,
-            radius=self.radius,
-            axes=self.axes,
-            angle=self.angle
-        )
-        
-        # Create polygon for detection region (approximation for circle/ellipse)
+        # Create polygon for this lane
         if self.mode == CalibrationMode.POLYGON:
-            self.polygon = np.array(self.calibration_points, dtype=np.int32)
+            polygon = np.array(self.calibration_points, dtype=np.int32)
         elif self.mode == CalibrationMode.CIRCLE:
-            # Create polygon approximation of circle
-            self.polygon = self._create_circle_polygon()
+            polygon = self._create_circle_polygon()
         elif self.mode == CalibrationMode.ELLIPSE:
-            # Create polygon approximation of ellipse
-            self.polygon = self._create_ellipse_polygon()
+            polygon = self._create_ellipse_polygon()
+        else:
+            polygon = np.array(self.calibration_points, dtype=np.int32)
         
-        logger.info(f"Calibration complete! Mode: {self.mode.value}")
+        # Save current lane data
+        lane_data = {
+            'lane_id': self.current_lane + 1,
+            'points': self.calibration_points.copy(),
+            'road_length_meters': road_length,
+            'road_width_meters': road_width,
+            'road_area_meters': road_area,
+            'polygon': polygon.tolist() if polygon is not None else None
+        }
+        self.lanes_data.append(lane_data)
+        self.all_polygons.append(polygon)
+        
+        logger.info(f"Lane {self.current_lane + 1}/{self.num_lanes} calibrated")
         logger.info(f"  Road Length (Ls): {road_length:.2f} m")
         logger.info(f"  Road Width (Ws): {road_width:.2f} m")
         logger.info(f"  Road Area (DT): {road_area:.2f} m²")
         
-        return True
+        # Check if all lanes are done
+        if len(self.lanes_data) >= self.num_lanes:
+            # All lanes calibrated - create final calibration data
+            total_area = sum(lane['road_area_meters'] for lane in self.lanes_data)
+            
+            # Calculate homography if requested (only for polygon, first lane)
+            homography = None
+            if use_perspective and self.mode == CalibrationMode.POLYGON and len(self.lanes_data) > 0:
+                first_lane = self.lanes_data[0]
+                homography = self._calculate_homography(
+                    first_lane['road_length_meters'], 
+                    first_lane['road_width_meters']
+                )
+            
+            # Use first lane's points as primary points for backward compatibility
+            first_lane = self.lanes_data[0]
+            self.calibration = CalibrationData(
+                points=first_lane['points'],
+                road_length_meters=first_lane['road_length_meters'],
+                road_width_meters=first_lane['road_width_meters'],
+                road_area_meters=total_area,  # Total area of all lanes
+                homography_matrix=homography.tolist() if homography is not None else None,
+                calibration_mode=self.mode.value,
+                center=self.center,
+                radius=self.radius,
+                axes=self.axes,
+                angle=self.angle,
+                num_lanes=self.num_lanes,
+                lanes=self.lanes_data.copy()
+            )
+            
+            # Combine all polygons
+            self.polygon = self.all_polygons[0] if len(self.all_polygons) > 0 else None
+            
+            logger.info(f"All {self.num_lanes} lanes calibrated! Total area: {total_area:.2f} m²")
+            return True
+        else:
+            # Move to next lane
+            self.current_lane += 1
+            self.calibration_points = []
+            self.center = None
+            self.radius = None
+            self.axes = None
+            self.angle = 0.0
+            logger.info(f"Ready for lane {self.current_lane + 1}/{self.num_lanes}")
+            return False  # Not complete yet
     
     def _create_circle_polygon(self, num_points: int = 64) -> np.ndarray:
         """Create polygon approximation of circle"""
@@ -349,10 +438,42 @@ class CalibrationManager:
         return homography
     
     def is_point_in_region(self, x: float, y: float) -> bool:
-        """Check if point is inside calibration region"""
-        if self.polygon is None:
+        """Check if point is inside any calibration region (any lane)"""
+        if self.polygon is None and len(self.all_polygons) == 0:
             return True
-        return cv2.pointPolygonTest(self.polygon, (float(x), float(y)), False) >= 0
+        
+        # Check in primary polygon
+        if self.polygon is not None:
+            if cv2.pointPolygonTest(self.polygon, (float(x), float(y)), False) >= 0:
+                return True
+        
+        # Check in all lane polygons
+        for polygon in self.all_polygons:
+            if polygon is not None:
+                if cv2.pointPolygonTest(polygon, (float(x), float(y)), False) >= 0:
+                    return True
+        
+        return False
+    
+    def get_point_lane(self, x: float, y: float) -> int:
+        """
+        Get which lane the point belongs to
+        
+        Returns:
+            Lane number (1-based), or 0 if not in any lane
+        """
+        # Check in all lane polygons
+        for lane_idx, polygon in enumerate(self.all_polygons):
+            if polygon is not None:
+                if cv2.pointPolygonTest(polygon, (float(x), float(y)), False) >= 0:
+                    return lane_idx + 1  # 1-based lane number
+        
+        # Check in primary polygon (for backward compatibility with single lane)
+        if self.polygon is not None:
+            if cv2.pointPolygonTest(self.polygon, (float(x), float(y)), False) >= 0:
+                return 1
+        
+        return 0
     
     def is_bbox_in_region(self, bbox: List[float]) -> bool:
         """
@@ -412,7 +533,20 @@ class CalibrationManager:
         self.axes = tuple(self.calibration.axes) if self.calibration.axes else None
         self.angle = self.calibration.angle
         
-        # Recreate polygon based on mode
+        # Restore multi-lane data
+        self.num_lanes = self.calibration.num_lanes
+        self.lanes_data = self.calibration.lanes if self.calibration.lanes else []
+        self.current_lane = len(self.lanes_data)
+        
+        # Recreate polygons for all lanes
+        self.all_polygons = []
+        if self.lanes_data:
+            for lane in self.lanes_data:
+                if lane.get('polygon'):
+                    polygon = np.array(lane['polygon'], dtype=np.int32)
+                    self.all_polygons.append(polygon)
+        
+        # Recreate primary polygon based on mode
         if self.mode == CalibrationMode.POLYGON:
             self.polygon = np.array(self.calibration_points, dtype=np.int32)
         elif self.mode == CalibrationMode.CIRCLE:
@@ -420,7 +554,7 @@ class CalibrationManager:
         elif self.mode == CalibrationMode.ELLIPSE:
             self.polygon = self._create_ellipse_polygon()
         
-        logger.info(f"Calibration profile loaded: {filepath} (mode: {self.mode.value})")
+        logger.info(f"Calibration profile loaded: {filepath} (mode: {self.mode.value}, lanes: {self.num_lanes})")
         return True
     
     def reset(self):
@@ -432,12 +566,37 @@ class CalibrationManager:
         self.radius = None
         self.axes = None
         self.angle = 0.0
-        # Keep current mode
+        # Reset multi-lane data
+        self.current_lane = 0
+        self.lanes_data = []
+        self.all_polygons = []
+        # Keep num_lanes and mode
     
     def get_road_area(self) -> float:
         """Get calibrated road area (DT)"""
         if self.calibration:
             return self.calibration.road_area_meters
+        return 0.0
+    
+    def get_lane_area(self, lane_number: int) -> float:
+        """
+        Get area of a specific lane
+        
+        Args:
+            lane_number: Lane number (1-based)
+        
+        Returns:
+            Area in square meters, or 0 if lane doesn't exist
+        """
+        if self.calibration and self.calibration.lanes:
+            for lane in self.calibration.lanes:
+                if lane['lane_id'] == lane_number:
+                    return lane['road_area_meters']
+        
+        # Fallback for single lane
+        if lane_number == 1 and self.calibration:
+            return self.calibration.road_area_meters
+        
         return 0.0
     
     def get_points(self) -> List[Tuple[int, int]]:
@@ -450,31 +609,67 @@ class CalibrationManager:
         """Draw calibration points on frame based on current mode"""
         result = frame.copy()
         
+        # Define colors for different lanes
+        lane_colors = [
+            (0, 255, 0),      # Green - Lane 1
+            (255, 165, 0),    # Orange - Lane 2
+            (255, 0, 255),    # Magenta - Lane 3
+            (0, 255, 255)     # Cyan - Lane 4
+        ]
+        
+        # Draw completed lanes
+        for lane_idx, lane in enumerate(self.lanes_data):
+            lane_color = lane_colors[lane_idx % len(lane_colors)]
+            points = lane['points']
+            
+            if self.mode == CalibrationMode.POLYGON:
+                # Draw points
+                for i, point in enumerate(points):
+                    cv2.circle(result, tuple(point), radius, lane_color, -1)
+                    cv2.putText(result, f"L{lane_idx+1}P{i+1}", 
+                               (point[0] + 10, point[1] - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, lane_color, thickness)
+                
+                # Draw lines between points
+                if len(points) >= 2:
+                    for i in range(len(points) - 1):
+                        cv2.line(result, tuple(points[i]), tuple(points[i + 1]), 
+                                lane_color, thickness)
+                    
+                    # Close polygon if 4 points
+                    if len(points) == 4:
+                        cv2.line(result, tuple(points[3]), tuple(points[0]), 
+                                lane_color, thickness)
+        
+        # Draw current lane being calibrated
+        current_color = lane_colors[self.current_lane % len(lane_colors)]
+        
         if self.mode == CalibrationMode.POLYGON:
             # Draw points
             for i, point in enumerate(self.calibration_points):
-                cv2.circle(result, point, radius, color, -1)
-                cv2.putText(result, f"P{i+1}", (point[0] + 10, point[1] - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, thickness)
+                cv2.circle(result, point, radius, current_color, -1)
+                cv2.putText(result, f"L{self.current_lane+1}P{i+1}", 
+                           (point[0] + 10, point[1] - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, current_color, thickness)
             
             # Draw lines between points
             if len(self.calibration_points) >= 2:
                 for i in range(len(self.calibration_points) - 1):
                     cv2.line(result, self.calibration_points[i], 
-                            self.calibration_points[i + 1], color, thickness)
+                            self.calibration_points[i + 1], current_color, thickness)
                 
                 # Close polygon if 4 points
                 if len(self.calibration_points) == 4:
                     cv2.line(result, self.calibration_points[3], 
-                            self.calibration_points[0], color, thickness)
+                            self.calibration_points[0], current_color, thickness)
         
         elif self.mode == CalibrationMode.CIRCLE:
             # Draw center point
             if len(self.calibration_points) >= 1:
-                cv2.circle(result, self.calibration_points[0], radius, color, -1)
+                cv2.circle(result, self.calibration_points[0], radius, current_color, -1)
                 cv2.putText(result, "Center", (self.calibration_points[0][0] + 10, 
                            self.calibration_points[0][1] - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, thickness)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, current_color, thickness)
             
             # Draw circle preview
             if len(self.calibration_points) == 2:
@@ -484,15 +679,15 @@ class CalibrationManager:
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), thickness)
                 
                 if self.radius:
-                    cv2.circle(result, self.center, self.radius, color, thickness)
+                    cv2.circle(result, self.center, self.radius, current_color, thickness)
         
         elif self.mode == CalibrationMode.ELLIPSE:
             # Draw center point
             if len(self.calibration_points) >= 1:
-                cv2.circle(result, self.calibration_points[0], radius, color, -1)
+                cv2.circle(result, self.calibration_points[0], radius, current_color, -1)
                 cv2.putText(result, "Center", (self.calibration_points[0][0] + 10, 
                            self.calibration_points[0][1] - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, thickness)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, current_color, thickness)
             
             # Draw axis points
             if len(self.calibration_points) >= 2:
@@ -521,18 +716,50 @@ class CalibrationManager:
     def draw_region(self, frame: np.ndarray, 
                    color: Tuple[int, int, int] = (0, 255, 255),
                    alpha: float = 0.3) -> np.ndarray:
-        """Draw detection region overlay"""
-        if self.polygon is None or len(self.polygon) == 0:
-            return frame
-        
+        """Draw detection region overlay for all lanes with semi-transparent fill"""
         overlay = frame.copy()
+        result = frame.copy()
         
-        # Draw based on mode
-        if self.mode == CalibrationMode.CIRCLE and self.center and self.radius:
-            cv2.circle(overlay, self.center, self.radius, color, 2)
-        elif self.mode == CalibrationMode.ELLIPSE and self.center and self.axes:
-            cv2.ellipse(overlay, self.center, self.axes, self.angle, 0, 360, color, 2)
-        else:
-            cv2.polylines(overlay, [self.polygon], True, color, 2)
+        # Define colors for different lanes
+        lane_colors = [
+            (0, 255, 0),      # Green - Lane 1
+            (255, 165, 0),    # Orange - Lane 2
+        ]
         
-        return cv2.addWeighted(overlay, 0.7, frame, 0.3, 0)
+        # Draw all lane polygons with filled background
+        for lane_idx, polygon in enumerate(self.all_polygons):
+            if polygon is not None and len(polygon) > 0:
+                lane_color = lane_colors[lane_idx % len(lane_colors)]
+                
+                # Fill polygon with semi-transparent color
+                cv2.fillPoly(overlay, [polygon], lane_color)
+                
+                # Draw outline
+                cv2.polylines(result, [polygon], True, lane_color, 2)
+                
+                # Add lane label
+                if len(polygon) > 0:
+                    # Find center of polygon
+                    M = cv2.moments(polygon)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        cv2.putText(result, f"Lane {lane_idx+1}", (cx-30, cy),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, lane_color, 2)
+        
+        # Draw primary polygon if exists (for backward compatibility)
+        if self.polygon is not None and len(self.polygon) > 0 and len(self.all_polygons) == 0:
+            if self.mode == CalibrationMode.CIRCLE and self.center and self.radius:
+                cv2.circle(overlay, self.center, self.radius, color, -1)
+                cv2.circle(result, self.center, self.radius, color, 2)
+            elif self.mode == CalibrationMode.ELLIPSE and self.center and self.axes:
+                cv2.ellipse(overlay, self.center, self.axes, self.angle, 0, 360, color, -1)
+                cv2.ellipse(result, self.center, self.axes, self.angle, 0, 360, color, 2)
+            else:
+                cv2.fillPoly(overlay, [self.polygon], color)
+                cv2.polylines(result, [self.polygon], True, color, 2)
+        
+        # Blend overlay with result (semi-transparent fill)
+        cv2.addWeighted(overlay, 0.2, result, 0.8, 0, result)
+        
+        return result

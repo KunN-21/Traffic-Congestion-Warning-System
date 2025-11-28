@@ -114,9 +114,9 @@ class Settings:
     
     # Density Thresholds
     DENSITY_THRESHOLDS = [
-        DensityThreshold('Thấp', 30.0, 'Vắng vẻ', (0, 255, 0)),
-        DensityThreshold('Trung bình', 80.0, 'Khá đông', (0, 255, 255)),
-        DensityThreshold('Cao', float('inf'), 'Đông đúc', (0, 0, 255))
+        DensityThreshold('Thấp', 30.0, 'Thấp', (0, 255, 0)),
+        DensityThreshold('Trung bình', 80.0, 'Trung bình', (0, 255, 255)),
+        DensityThreshold('Cao', float('inf'), 'Cao', (0, 0, 255))
     ]
     
     # Calibration Display

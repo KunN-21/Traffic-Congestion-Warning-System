@@ -27,7 +27,7 @@ class CalibrationWidget(QWidget):
             "2. Nhập chiều dài thực tế (Ls) của đoạn đường\n"
             "3. Nhập chiều rộng thực tế (Ws) của đường\n"
             "4. Hệ thống sẽ tính diện tích DT = Ls × Ws\n\n"
-            "Lưu ý:\n"
+            "Lưu ý\n"
             "- Chấm 4 điểm theo thứ tự: góc trên trái → trên phải → dưới phải → dưới trái\n"
             "- Đảm bảo vùng được đánh dấu là vùng cần giám sát\n"
             "- Nhập kích thước thực tế chính xác để tính mật độ đúng"

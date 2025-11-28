@@ -586,7 +586,9 @@ class VideoSelectorWidget(QWidget):
         for i in range(self.grid_layout.count()):
             item = self.grid_layout.itemAt(i)
             if item and item.widget():
-                item.widget().apply_theme(is_dark)
+                widget = item.widget()
+                if hasattr(widget, 'apply_theme'):
+                    widget.apply_theme(is_dark)
 
 
 # Keep old class name for compatibility
