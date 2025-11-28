@@ -1,0 +1,28 @@
+# Custom BoT-SORT configuration for Traffic Monitoring System
+# Based on: https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/trackers/botsort.yaml
+
+tracker_type: botsort
+
+# Tracking thresholds
+track_high_thresh: 0.5    # Threshold for first association (high confidence detections)
+track_low_thresh: 0.1     # Threshold for second association (low confidence detections)
+new_track_thresh: 0.6     # Threshold to initialize a new track
+track_buffer: 30          # Frames to keep lost tracks before deletion
+
+# Matching
+match_thresh: 0.8         # Threshold for matching tracks
+fuse_score: true          # Fuse confidence score with IoU distance
+
+# Global Motion Compensation (GMC)
+# Options: orb, sift, ecc, sparseOptFlow, None
+gmc_method: sparseOptFlow
+
+# ReID (Re-Identification)
+proximity_thresh: 0.5     # Minimum IoU for valid ReID matching
+appearance_thresh: 0.25   # Minimum appearance similarity for ReID
+
+# ReID Configuration
+# Set with_reid to true for better tracking with occlusion (slower)
+# Model options: auto (native YOLO features), yolo11n-cls.pt, yolo11s-cls.pt, yolo11m-cls.pt
+with_reid: false
+model: auto

@@ -1,0 +1,62 @@
+{
+  "model": {
+    "model_path": "Model/best_v2.pt",
+    "conf_threshold": 0.5,
+    "iou_threshold": 0.6,
+    "detection_conf_filter": 0.4,
+    "imgsz": 640,
+    "half": true,
+    "max_det": 100,
+    "agnostic_nms": true
+  },
+  "tracker": {
+    "tracker_type": "botsort",
+    "max_age": 30,
+    "n_init": 10,
+    "max_iou_distance": 0.7,
+    "max_cosine_distance": 0.25,
+    "nn_budget": 70,
+    "embedder": "mobilenet",
+    "embedder_gpu": true,
+    "track_high_thresh": 0.5,
+    "track_low_thresh": 0.1,
+    "new_track_thresh": 0.6,
+    "track_buffer": 30,
+    "match_thresh": 0.6,
+    "fuse_score": true,
+    "gmc_method": "sparseOptFlow",
+    "proximity_thresh": 0.5,
+    "appearance_thresh": 0.25,
+    "with_reid": true,
+    "reid_model": "yolo11m-cls.pt",
+    "reid_frequency": 3,
+    "batch_reid": true,
+    "max_reid_batch_size": 32,
+    "use_kalman_prediction": true
+  },
+  "calibration": {
+    "require_real_dimensions": true,
+    "default_road_length": 50.0,
+    "default_road_width": 10.0,
+    "use_perspective_transform": true,
+    "enable_save": true,
+    "profiles_dir": "calibration_profiles"
+  },
+  "video": {
+    "frame_skip": 1,
+    "fps_limit": null,
+    "process_resize_width": null,
+    "wait_key_ms": 30
+  },
+  "display": {
+    "info_panel_height": 380,
+    "font_scale_title": 0.6,
+    "font_scale_text": 0.5,
+    "font_scale_value": 0.6,
+    "font_scale_status": 0.9,
+    "font_thickness": 2,
+    "font_thickness_thin": 1,
+    "show_vehicle_dimensions": true,
+    "show_area_metrics": true
+  }
+}
