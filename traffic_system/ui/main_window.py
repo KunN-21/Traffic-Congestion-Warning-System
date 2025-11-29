@@ -8,12 +8,12 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QGroupBox, QGridLayout, QStatusBar, QTabWidget,
                              QStackedWidget, QComboBox)
 from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt
 import os
 import time
 
 from .video_widget import VideoWidget
 from .config_dialog import ConfigDialog
-from .chart_widget import TrafficChartPanel, MiniDensityGauge
 from .timeline_widget import VideoTimeline
 from .video_selector import VideoSelectorWidget
 from ..config.settings import Settings
@@ -63,6 +63,9 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.setup_menu()
         self.setup_connections()
+        
+        # Apply control buttons theme after UI is created
+        self.apply_control_buttons_theme()
         
         # Status
         self.is_playing = False
@@ -127,35 +130,10 @@ class MainWindow(QMainWindow):
         """Create control buttons"""
         group = QGroupBox("Điều Khiển")
         layout = QHBoxLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(10)
         
-        # Back to video list button
-        self.btn_back = QPushButton("Quay Lại Danh Sách")
-        self.btn_back.setMinimumHeight(50)
-        self.btn_back.setStyleSheet("""
-            QPushButton {
-                background-color: #45475a;
-                color: white;
-                border: 1px solid #585b70;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 15px;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #585b70;
-            }
-        """)
-        self.btn_back.clicked.connect(self.show_video_selector)
-        layout.addWidget(self.btn_back)
-        
-        # Calibration mode selector
-        mode_layout = QHBoxLayout()
-        mode_label = QLabel("Chế độ:")
-        mode_label.setStyleSheet("color: #cdd6f4; font-size: 14px;")
-        self.combo_calib_mode = QComboBox()
-        self.combo_calib_mode.addItems(["Đa Giác (4 điểm)", "Hình Tròn (vòng xoay)", "Elip (vòng xoay dẹt)"])
-        self.combo_calib_mode.setStyleSheet("""
+        # Common styles
+        combobox_style = """
             QComboBox {
                 background-color: #45475a;
                 color: #cdd6f4;
@@ -163,7 +141,6 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
                 padding: 8px 12px;
                 font-size: 14px;
-                min-width: 180px;
             }
             QComboBox:hover {
                 border-color: #89b4fa;
@@ -186,16 +163,65 @@ class MainWindow(QMainWindow):
                 border: 1px solid #585b70;
                 border-radius: 4px;
             }
+        """
+        
+        # Back to video list button
+        self.btn_back = QPushButton("Quay Lại Danh Sách")
+        self.btn_back.setMinimumHeight(40)
+        self.btn_back.setStyleSheet("""
+            QPushButton {
+                background-color: #45475a;
+                color: white;
+                border: 1px solid #585b70;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #585b70;
+            }
         """)
+        self.btn_back.clicked.connect(self.show_video_selector)
+        layout.addWidget(self.btn_back)
+        
+        # Lane selector
+        self.lbl_lane = QLabel("Số làn:")
+        self.lbl_lane.setStyleSheet("color: #cdd6f4; font-size: 14px;")
+        layout.addWidget(self.lbl_lane)
+        
+        self.combo_num_lanes = QComboBox()
+        self.combo_num_lanes.addItems(["1 làn", "2 làn"])
+        self.combo_num_lanes.setStyleSheet(combobox_style)
+        self.combo_num_lanes.currentIndexChanged.connect(self.on_num_lanes_changed)
+        layout.addWidget(self.combo_num_lanes)
+        
+        # Current lane label
+        self.lbl_current_lane = QLabel("Làn: 1/1")
+        self.lbl_current_lane.setStyleSheet("""
+            color: #a6e3a1;
+            font-size: 14px;
+            font-weight: bold;
+            background-color: #313244;
+            padding: 8px 16px;
+            border-radius: 6px;
+        """)
+        layout.addWidget(self.lbl_current_lane)
+        
+        # Calibration mode selector
+        self.lbl_mode = QLabel("Chế độ:")
+        self.lbl_mode.setStyleSheet("color: #cdd6f4; font-size: 14px;")
+        layout.addWidget(self.lbl_mode)
+        
+        self.combo_calib_mode = QComboBox()
+        self.combo_calib_mode.addItems(["Đa Giác (4 điểm)", "Hình Tròn (vòng xoay)", "Elip (vòng xoay dẹt)"])
+        self.combo_calib_mode.setStyleSheet(combobox_style)
         self.combo_calib_mode.currentIndexChanged.connect(self.on_calib_mode_changed)
-        mode_layout.addWidget(mode_label)
-        mode_layout.addWidget(self.combo_calib_mode)
-        mode_layout.addStretch()
-        layout.addLayout(mode_layout)
+        layout.addWidget(self.combo_calib_mode)
         
         # Calibration button
         self.btn_calibrate = QPushButton("Hiệu Chỉnh Vùng Quan Sát")
-        self.btn_calibrate.setMinimumHeight(50)
+        self.btn_calibrate.setMinimumHeight(40)
         self.btn_calibrate.setEnabled(False)
         self.btn_calibrate.setStyleSheet("""
             QPushButton {
@@ -204,8 +230,8 @@ class MainWindow(QMainWindow):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 15px;
-                padding: 12px 24px;
+                font-size: 14px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #f9c096;
@@ -219,8 +245,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_calibrate)
         
         # Traffic Light ROI button
-        self.btn_traffic_light = QPushButton("Chọn Vùng Đèn Giao Thông")
-        self.btn_traffic_light.setMinimumHeight(50)
+        self.btn_traffic_light = QPushButton("Cài Đặt Đèn GT")
+        self.btn_traffic_light.setMinimumHeight(40)
         self.btn_traffic_light.setEnabled(False)
         self.btn_traffic_light.setStyleSheet("""
             QPushButton {
@@ -229,8 +255,8 @@ class MainWindow(QMainWindow):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 15px;
-                padding: 12px 24px;
+                font-size: 14px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #ddb6ff;
@@ -245,7 +271,7 @@ class MainWindow(QMainWindow):
         
         # Play/Pause button
         self.btn_play = QPushButton("Phát Video")
-        self.btn_play.setMinimumHeight(50)
+        self.btn_play.setMinimumHeight(40)
         self.btn_play.setEnabled(False)
         self.btn_play.setStyleSheet("""
             QPushButton {
@@ -254,8 +280,8 @@ class MainWindow(QMainWindow):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 15px;
-                padding: 12px 24px;
+                font-size: 14px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #94e2d5;
@@ -270,7 +296,7 @@ class MainWindow(QMainWindow):
         
         # Stop button
         self.btn_stop = QPushButton("Dừng Phân Tích")
-        self.btn_stop.setMinimumHeight(50)
+        self.btn_stop.setMinimumHeight(40)
         self.btn_stop.setEnabled(False)
         self.btn_stop.setStyleSheet("""
             QPushButton {
@@ -279,8 +305,8 @@ class MainWindow(QMainWindow):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 15px;
-                padding: 12px 24px;
+                font-size: 14px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #eba0ac;
@@ -296,38 +322,179 @@ class MainWindow(QMainWindow):
         return group
     
     def create_right_panel(self):
-        """Create right panel with statistics and charts"""
+        """Create right panel with statistics and configuration"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(10)
         
-        # Density Gauge at top
+        # Density Status at top - simple display with Low/Medium/High and percentage
         gauge_group = QGroupBox("Mật Độ Giao Thông")
         gauge_layout = QHBoxLayout(gauge_group)
-        self.density_gauge = MiniDensityGauge()
-        self.density_gauge.apply_theme(self.is_dark_theme)
-        gauge_layout.addWidget(self.density_gauge)
+        gauge_layout.setSpacing(15)
+        
+        # Status label (Low/Medium/High)
+        self.lbl_density_status = QLabel("--")
+        self.lbl_density_status.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background-color: #6c7086;
+            color: white;
+        """)
+        self.lbl_density_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_density_status.setMinimumWidth(120)
+        gauge_layout.addWidget(self.lbl_density_status)
+        
+        # Percentage label
+        self.lbl_density_percent = QLabel("0.0%")
+        self.lbl_density_percent.setStyleSheet("""
+            font-size: 28px;
+            font-weight: bold;
+            color: #89b4fa;
+        """)
+        self.lbl_density_percent.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gauge_layout.addWidget(self.lbl_density_percent)
+        
         gauge_layout.addStretch()
         layout.addWidget(gauge_group)
         
         # Tab widget for different info sections
         tabs = QTabWidget()
         
-        # Tab 1: Statistics
+        # Tab 1: Statistics (Lane counts only)
         stats_tab = self.create_stats_tab()
         tabs.addTab(stats_tab, "Thống Kê")
         
-        # Tab 2: Charts
-        self.chart_panel = TrafficChartPanel()
-        self.chart_panel.apply_theme(self.is_dark_theme)
-        tabs.addTab(self.chart_panel, "Biểu Đồ")
+        # Tab 2: Configuration (System info, Calibration params, Density info)
+        config_tab = self.create_config_tab()
+        tabs.addTab(config_tab, "Cấu Hình")
         
         layout.addWidget(tabs, stretch=1)
         
         return widget
     
     def create_stats_tab(self):
-        """Create statistics tab content"""
+        """Create statistics tab content - Lane vehicle counts only"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        
+        vehicle_names = {
+            'motorcycle': 'Xe máy',
+            'bicycle': 'Xe đạp', 
+            'car': 'Ô tô',
+            'bus': 'Xe buýt',
+            'truck': 'Xe tải'
+        }
+        
+        # Lane 1 vehicle counts
+        vehicle1_group = QGroupBox("Làn 1 - Số Lượng Phương Tiện")
+        vehicle1_layout = QGridLayout(vehicle1_group)
+        vehicle1_layout.setSpacing(8)
+        
+        self.lbl_lane1_counts = {}
+        row = 0
+        for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
+            label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
+            label.setStyleSheet("font-size: 14px; font-weight: bold;")
+            count = QLabel("0")
+            count.setStyleSheet("font-size: 16px; font-weight: bold; color: #a6e3a1;")
+            vehicle1_layout.addWidget(label, row, 0)
+            vehicle1_layout.addWidget(count, row, 1)
+            self.lbl_lane1_counts[vehicle_type] = count
+            row += 1
+        
+        # Lane 1 density status
+        lbl = QLabel("Mật độ giao thông:")
+        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        vehicle1_layout.addWidget(lbl, row, 0)
+        
+        # Status and ratio in horizontal layout
+        lane1_status_widget = QWidget()
+        lane1_status_layout = QHBoxLayout(lane1_status_widget)
+        lane1_status_layout.setContentsMargins(0, 0, 0, 0)
+        lane1_status_layout.setSpacing(10)
+        
+        self.lbl_lane1_status = QLabel("-")
+        self.lbl_lane1_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+        lane1_status_layout.addWidget(self.lbl_lane1_status)
+        
+        self.lbl_lane1_ratio = QLabel("0.0%")
+        self.lbl_lane1_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        lane1_status_layout.addWidget(self.lbl_lane1_ratio)
+        
+        lane1_status_layout.addStretch()
+        vehicle1_layout.addWidget(lane1_status_widget, row, 1)
+        
+        layout.addWidget(vehicle1_group)
+        
+        # Lane 2 vehicle counts
+        vehicle2_group = QGroupBox("Làn 2 - Số Lượng Phương Tiện")
+        vehicle2_layout = QGridLayout(vehicle2_group)
+        vehicle2_layout.setSpacing(8)
+        
+        self.lbl_lane2_counts = {}
+        row = 0
+        for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
+            label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
+            label.setStyleSheet("font-size: 14px; font-weight: bold;")
+            count = QLabel("0")
+            count.setStyleSheet("font-size: 16px; font-weight: bold; color: #fab387;")
+            vehicle2_layout.addWidget(label, row, 0)
+            vehicle2_layout.addWidget(count, row, 1)
+            self.lbl_lane2_counts[vehicle_type] = count
+            row += 1
+        
+        # Lane 2 density status
+        lbl = QLabel("Mật độ giao thông:")
+        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        vehicle2_layout.addWidget(lbl, row, 0)
+        
+        # Status and ratio in horizontal layout
+        lane2_status_widget = QWidget()
+        lane2_status_layout = QHBoxLayout(lane2_status_widget)
+        lane2_status_layout.setContentsMargins(0, 0, 0, 0)
+        lane2_status_layout.setSpacing(10)
+        
+        self.lbl_lane2_status = QLabel("-")
+        self.lbl_lane2_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+        lane2_status_layout.addWidget(self.lbl_lane2_status)
+        
+        self.lbl_lane2_ratio = QLabel("0.0%")
+        self.lbl_lane2_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        lane2_status_layout.addWidget(self.lbl_lane2_ratio)
+        
+        lane2_status_layout.addStretch()
+        vehicle2_layout.addWidget(lane2_status_widget, row, 1)
+        
+        layout.addWidget(vehicle2_group)
+        
+        # Overall vehicle counts (for backward compatibility and single-lane mode)
+        vehicle_group = QGroupBox("Tổng Số Lượng Phương Tiện")
+        vehicle_layout = QGridLayout(vehicle_group)
+        vehicle_layout.setSpacing(8)
+        
+        self.lbl_counts = {}
+        row = 0
+        for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
+            label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
+            label.setStyleSheet("font-size: 16px; font-weight: bold;")
+            count = QLabel("0")
+            count.setStyleSheet("font-size: 20px; font-weight: bold; color: #89b4fa;")
+            vehicle_layout.addWidget(label, row, 0)
+            vehicle_layout.addWidget(count, row, 1)
+            self.lbl_counts[vehicle_type] = count
+            row += 1
+        
+        layout.addWidget(vehicle_group)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def create_config_tab(self):
+        """Create configuration tab content - System info, Calibration params, Density info"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(10)
@@ -398,33 +565,6 @@ class MainWindow(QMainWindow):
         calib_layout.addWidget(self.lbl_area, 2, 1)
         
         layout.addWidget(calib_group)
-        
-        # Vehicle counts
-        vehicle_group = QGroupBox("Số Lượng Phương Tiện")
-        vehicle_layout = QGridLayout(vehicle_group)
-        vehicle_layout.setSpacing(8)
-        
-        vehicle_names = {
-            'motorcycle': 'Xe máy',
-            'bicycle': 'Xe đạp', 
-            'car': 'Ô tô',
-            'bus': 'Xe buýt',
-            'truck': 'Xe tải'
-        }
-        
-        self.lbl_counts = {}
-        row = 0
-        for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
-            label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
-            label.setStyleSheet("font-size: 16px; font-weight: bold;")
-            count = QLabel("0")
-            count.setStyleSheet("font-size: 20px; font-weight: bold; color: #89b4fa;")
-            vehicle_layout.addWidget(label, row, 0)
-            vehicle_layout.addWidget(count, row, 1)
-            self.lbl_counts[vehicle_type] = count
-            row += 1
-        
-        layout.addWidget(vehicle_group)
         
         # Density info
         density_group = QGroupBox("Mật Độ Giao Thông")
@@ -568,6 +708,30 @@ class MainWindow(QMainWindow):
             # Load traffic light ROI if available
             if self.calibration.calibration and self.calibration.calibration.traffic_light_roi:
                 has_traffic_light = True
+            # Sync UI with loaded profile
+            num_lanes = self.calibration.get_num_lanes()
+            self.combo_num_lanes.blockSignals(True)  # Prevent triggering on_num_lanes_changed
+            self.combo_num_lanes.setCurrentIndex(num_lanes - 1)
+            self.combo_num_lanes.blockSignals(False)
+            self.lbl_current_lane.setText(f"Làn: {num_lanes}/{num_lanes}")
+            # Also sync calibration mode
+            mode = self.calibration.get_mode()
+            mode_index = {CalibrationMode.POLYGON: 0, CalibrationMode.CIRCLE: 1, CalibrationMode.ELLIPSE: 2}
+            self.combo_calib_mode.blockSignals(True)
+            self.combo_calib_mode.setCurrentIndex(mode_index.get(mode, 0))
+            self.combo_calib_mode.blockSignals(False)
+        else:
+            # No profile - reset UI to defaults
+            self.combo_num_lanes.blockSignals(True)
+            self.combo_num_lanes.setCurrentIndex(0)  # Default to 1 lane
+            self.combo_num_lanes.blockSignals(False)
+            self.lbl_current_lane.setText("Làn: 1/1")
+            self.combo_calib_mode.blockSignals(True)
+            self.combo_calib_mode.setCurrentIndex(0)  # Default to polygon
+            self.combo_calib_mode.blockSignals(False)
+            # Reset calibration manager to 1 lane
+            self.calibration.set_num_lanes(1)
+            self.calibration.set_mode(CalibrationMode.POLYGON)
         
         # Load video
         self.video_widget.load_video(file_path, self.detector, self.tracker)
@@ -643,6 +807,14 @@ class MainWindow(QMainWindow):
         
         self.statusBar.showMessage(f"Đã khởi tạo Detector và Tracker ({tracker_type})")
     
+    def on_num_lanes_changed(self, index: int):
+        """Handle number of lanes change"""
+        num_lanes = index + 1  # index 0 = 1 lane, index 1 = 2 lanes, etc.
+        self.calibration.set_num_lanes(num_lanes)
+        self.lbl_current_lane.setText(f"Làn: 1/{num_lanes}")
+        self.statusBar.showMessage(f"Số làn đường: {num_lanes}")
+        logger.info(f"Number of lanes set to: {num_lanes}")
+    
     def on_calib_mode_changed(self, index: int):
         """Handle calibration mode change"""
         modes = [CalibrationMode.POLYGON, CalibrationMode.CIRCLE, CalibrationMode.ELLIPSE]
@@ -670,6 +842,11 @@ class MainWindow(QMainWindow):
         self.btn_traffic_light.setEnabled(False)
         self.btn_play.setEnabled(False)
         
+        # Update current lane display
+        num_lanes = self.calibration.get_num_lanes()
+        current_lane = self.calibration.get_current_lane()
+        self.lbl_current_lane.setText(f"Làn: {current_lane}/{num_lanes}")
+        
         # Show instructions based on mode
         mode = self.calibration.get_mode()
         required_points = self.calibration.get_required_points()
@@ -678,8 +855,9 @@ class MainWindow(QMainWindow):
             CalibrationMode.CIRCLE: "Nhấn 1 điểm TÂM, sau đó 1 điểm trên BÁN KÍNH",
             CalibrationMode.ELLIPSE: "Nhấn 1 điểm TÂM, sau đó 2 điểm trên 2 TRỤC"
         }
-        self.lbl_status.setText(f"Đang hiệu chỉnh - Nhấn {required_points} điểm")
-        self.statusBar.showMessage(mode_instructions.get(mode, "Đang hiệu chỉnh..."))
+        lane_info = f" - Làn {current_lane}/{num_lanes}" if num_lanes > 1 else ""
+        self.lbl_status.setText(f"Đang hiệu chỉnh{lane_info} - Nhấn {required_points} điểm")
+        self.statusBar.showMessage(mode_instructions.get(mode, "Đang hiệu chỉnh...") + lane_info)
     
     def start_traffic_light_calibration(self):
         """Start traffic light ROI calibration"""
@@ -721,12 +899,32 @@ class MainWindow(QMainWindow):
         self.statusBar.showMessage("Hiệu chỉnh đã bị hủy. Nhấn nút Hiệu Chỉnh để thử lại.")
     
     def on_calibration_complete(self, road_length: float, road_width: float):
-        """Called when calibration is complete"""
+        """Called when calibration is complete (for one lane or all lanes)"""
+        num_lanes = self.calibration.get_num_lanes()
+        
+        # Check if all lanes are calibrated
+        if not self.calibration.is_all_lanes_calibrated():
+            # More lanes to calibrate
+            current_lane = self.calibration.get_current_lane()
+            self.lbl_current_lane.setText(f"Làn: {current_lane}/{num_lanes}")
+            self.lbl_status.setText(f"Đang hiệu chỉnh làn {current_lane}/{num_lanes}")
+            self.statusBar.showMessage(f"Làn {current_lane-1} hoàn tất! Tiếp tục hiệu chỉnh làn {current_lane}...")
+            
+            # Continue calibration for next lane
+            self.video_widget.is_calibrating = True
+            if self.video_widget.current_frame is not None:
+                self.video_widget.display_frame(self.video_widget.current_frame)
+            return
+        
+        # All lanes are calibrated
         self.is_calibrating = False
         self.btn_calibrate.setText("Hiệu Chỉnh Lại")
         self.btn_calibrate.setEnabled(True)
         self.btn_traffic_light.setEnabled(True)
         self.btn_play.setEnabled(True)
+        
+        # Reset lane display
+        self.lbl_current_lane.setText(f"Làn: {num_lanes}/{num_lanes}")
         
         # Save calibration profile
         if self.video_name:
@@ -750,7 +948,11 @@ class MainWindow(QMainWindow):
             elif cal.calibration_mode == "ellipse":
                 msg = f"Hiệu chỉnh hoàn tất!\n\nTrục chính: {road_length:.1f}m\nTrục phụ: {road_width:.1f}m\nDiện tích DT: {cal.road_area_meters:.1f}m²"
             else:
-                msg = f"Hiệu chỉnh hoàn tất!\n\nChiều dài Ls: {road_length:.1f}m\nChiều rộng Ws: {road_width:.1f}m\nDiện tích DT: {road_length*road_width:.1f}m²"
+                # Polygon mode with multi-lane info
+                if num_lanes > 1:
+                    msg = f"Hiệu chỉnh hoàn tất!\n\nSố làn: {num_lanes}\nTổng diện tích DT: {cal.road_area_meters:.1f}m²"
+                else:
+                    msg = f"Hiệu chỉnh hoàn tất!\n\nChiều dài Ls: {road_length:.1f}m\nChiều rộng Ws: {road_width:.1f}m\nDiện tích DT: {road_length*road_width:.1f}m²"
         else:
             msg = f"Hiệu chỉnh hoàn tất!\n\nChiều dài Ls: {road_length:.1f}m\nChiều rộng Ws: {road_width:.1f}m\nDiện tích DT: {road_length*road_width:.1f}m²"
         
@@ -856,6 +1058,101 @@ class MainWindow(QMainWindow):
             density_percentage = stats['density_percentage']
             self.lbl_percentage.setText(f"{density_percentage:.1f}%")
         
+        # Update per-lane vehicle counts and density display
+        if 'lane_densities' in stats and stats['lane_densities']:
+            lane_densities = stats['lane_densities']
+            
+            # Lane 1
+            if 'lane1' in lane_densities:
+                lane1_info = lane_densities['lane1']
+                
+                # Update Lane 1 vehicle counts
+                for vehicle_type in self.lbl_lane1_counts:
+                    count = lane1_info.get('vehicle_counts', {}).get(vehicle_type, 0)
+                    self.lbl_lane1_counts[vehicle_type].setText(str(count))
+                
+                # Update Lane 1 status
+                status1 = lane1_info['congestion_status']
+                color1 = lane1_info['congestion_color']
+                color1_str = f"rgb({color1[2]}, {color1[1]}, {color1[0]})"
+                self.lbl_lane1_status.setText(status1)
+                self.lbl_lane1_status.setStyleSheet(
+                    f"font-size: 16px; font-weight: bold; color: {color1_str};"
+                )
+                
+                # Update Lane 1 ratio
+                lane1_ratio = lane1_info.get('density_percentage', 0)
+                self.lbl_lane1_ratio.setText(f"{lane1_ratio:.1f}%")
+                self.lbl_lane1_ratio.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color1_str};")
+            else:
+                # Reset Lane 1
+                for vehicle_type in self.lbl_lane1_counts:
+                    self.lbl_lane1_counts[vehicle_type].setText('0')
+                self.lbl_lane1_status.setText("-")
+                self.lbl_lane1_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+                self.lbl_lane1_ratio.setText("0.0%")
+                self.lbl_lane1_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+            
+            # Lane 2
+            if 'lane2' in lane_densities:
+                lane2_info = lane_densities['lane2']
+                
+                # Update Lane 2 vehicle counts
+                for vehicle_type in self.lbl_lane2_counts:
+                    count = lane2_info.get('vehicle_counts', {}).get(vehicle_type, 0)
+                    self.lbl_lane2_counts[vehicle_type].setText(str(count))
+                
+                # Update Lane 2 status
+                status2 = lane2_info['congestion_status']
+                color2 = lane2_info['congestion_color']
+                color2_str = f"rgb({color2[2]}, {color2[1]}, {color2[0]})"
+                self.lbl_lane2_status.setText(status2)
+                self.lbl_lane2_status.setStyleSheet(
+                    f"font-size: 16px; font-weight: bold; color: {color2_str};"
+                )
+                
+                # Update Lane 2 ratio
+                lane2_ratio = lane2_info.get('density_percentage', 0)
+                self.lbl_lane2_ratio.setText(f"{lane2_ratio:.1f}%")
+                self.lbl_lane2_ratio.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color2_str};")
+            else:
+                # Reset Lane 2
+                for vehicle_type in self.lbl_lane2_counts:
+                    self.lbl_lane2_counts[vehicle_type].setText('0')
+                self.lbl_lane2_status.setText("-")
+                self.lbl_lane2_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+                self.lbl_lane2_ratio.setText("0.0%")
+                self.lbl_lane2_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        else:
+            # Single lane mode - show all in Lane 1
+            if 'vehicle_counts' in stats:
+                for vehicle_type, count in stats['vehicle_counts'].items():
+                    if vehicle_type in self.lbl_lane1_counts:
+                        self.lbl_lane1_counts[vehicle_type].setText(str(count))
+            
+            # Reset Lane 2
+            for vehicle_type in self.lbl_lane2_counts:
+                self.lbl_lane2_counts[vehicle_type].setText('0')
+            
+            # Update Lane 1 status with overall status
+            if 'congestion_status' in stats:
+                status = stats['congestion_status']
+                color = stats.get('congestion_color', (0, 0, 0))
+                color_str = f"rgb({color[2]}, {color[1]}, {color[0]})"
+                self.lbl_lane1_status.setText(status)
+                self.lbl_lane1_status.setStyleSheet(
+                    f"font-size: 16px; font-weight: bold; color: {color_str};"
+                )
+                # Update Lane 1 ratio in single lane mode
+                self.lbl_lane1_ratio.setText(f"{density_percentage:.1f}%")
+                self.lbl_lane1_ratio.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color_str};")
+            
+            self.lbl_lane2_status.setText("-")
+            self.lbl_lane2_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+            self.lbl_lane2_ratio.setText("0.0%")
+            self.lbl_lane2_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        
+        # Update main density status display
         if 'congestion_status' in stats:
             status = stats['congestion_status']
             color = stats.get('congestion_color', (0, 0, 0))
@@ -866,15 +1163,60 @@ class MainWindow(QMainWindow):
                 f"font-size: 20px; font-weight: bold; color: {color_str};"
             )
             
-            # Update density gauge
-            self.density_gauge.set_value(density_percentage, status, color)
+            # Update density status display (LOW/MEDIUM/HIGH with percentage)
+            self.update_density_status(density_percentage, status, color)
+        else:
+            # No congestion status - still update based on percentage
+            if density_percentage < 30:
+                status = 'LOW'
+                color = (0, 255, 0)  # Green
+            elif density_percentage < 80:
+                status = 'MEDIUM'
+                color = (0, 255, 255)  # Yellow
+            else:
+                status = 'HIGH'
+                color = (0, 0, 255)  # Red
+            self.update_density_status(density_percentage, status, color)
+    
+    def update_density_status(self, percentage: float, status: str, color: tuple):
+        """Update density status display with Low/Medium/High and percentage"""
+        # Status is now directly LOW/MEDIUM/HIGH from settings
+        display_status = status if status in ['LOW', 'MEDIUM', 'HIGH'] else '--'
         
-        # Update charts with stats dict
-        chart_stats = {
-            'density_percentage': density_percentage,
-            'vehicle_counts': vehicle_counts
-        }
-        self.chart_panel.update_data(chart_stats)
+        # Set status label with appropriate color
+        if display_status == 'LOW':
+            bg_color = '#4caf50'  # Green
+        elif display_status == 'MEDIUM':
+            bg_color = '#ff9800'  # Orange
+        elif display_status == 'HIGH':
+            bg_color = '#f44336'  # Red
+        else:
+            bg_color = '#6c7086'  # Gray
+        
+        self.lbl_density_status.setText(display_status)
+        self.lbl_density_status.setStyleSheet(f"""
+            font-size: 24px;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background-color: {bg_color};
+            color: white;
+        """)
+        
+        # Update percentage label
+        self.lbl_density_percent.setText(f"{percentage:.1f}%")
+        # Color based on percentage
+        if percentage < 30:
+            percent_color = '#4caf50'  # Green
+        elif percentage < 60:
+            percent_color = '#ff9800'  # Orange
+        else:
+            percent_color = '#f44336'  # Red
+        self.lbl_density_percent.setStyleSheet(f"""
+            font-size: 28px;
+            font-weight: bold;
+            color: {percent_color};
+        """)
     
     def open_config_dialog(self):
         """Open configuration dialog"""
@@ -965,15 +1307,292 @@ class MainWindow(QMainWindow):
         # Update timeline theme
         if hasattr(self, 'timeline'):
             self.timeline.apply_theme(self.is_dark_theme)
-            
-        # Update charts theme
-        if hasattr(self, 'chart_panel'):
-            self.chart_panel.apply_theme(self.is_dark_theme)
-            
-        if hasattr(self, 'density_gauge'):
-            self.density_gauge.apply_theme(self.is_dark_theme)
+        
+        # Update control buttons theme
+        self.apply_control_buttons_theme()
             
         self.statusBar.showMessage(f"Đã chuyển sang chế độ {'Tối' if self.is_dark_theme else 'Sáng'}")
+    
+    def apply_control_buttons_theme(self):
+        """Apply theme to control buttons"""
+        if self.is_dark_theme:
+            # Dark theme styles
+            combobox_style = """
+                QComboBox {
+                    background-color: #45475a;
+                    color: #cdd6f4;
+                    border: 1px solid #585b70;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 14px;
+                }
+                QComboBox:hover {
+                    border-color: #89b4fa;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    padding-right: 8px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-top: 6px solid #cdd6f4;
+                    margin-right: 8px;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: #313244;
+                    color: #cdd6f4;
+                    selection-background-color: #585b70;
+                    border: 1px solid #585b70;
+                    border-radius: 4px;
+                }
+            """
+            label_style = "color: #cdd6f4; font-size: 14px;"
+            lane_label_style = """
+                color: #a6e3a1;
+                font-size: 14px;
+                font-weight: bold;
+                background-color: #313244;
+                padding: 8px 16px;
+                border-radius: 6px;
+            """
+            back_btn_style = """
+                QPushButton {
+                    background-color: #45475a;
+                    color: white;
+                    border: 1px solid #585b70;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #585b70;
+                }
+            """
+            calibrate_btn_style = """
+                QPushButton {
+                    background-color: #fab387;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #f9c096;
+                }
+                QPushButton:disabled {
+                    background-color: #313244;
+                    color: #6c7086;
+                }
+            """
+            traffic_light_btn_style = """
+                QPushButton {
+                    background-color: #cba6f7;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #ddb6ff;
+                }
+                QPushButton:disabled {
+                    background-color: #313244;
+                    color: #6c7086;
+                }
+            """
+            play_btn_style = """
+                QPushButton {
+                    background-color: #a6e3a1;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #94e2d5;
+                }
+                QPushButton:disabled {
+                    background-color: #313244;
+                    color: #6c7086;
+                }
+            """
+            stop_btn_style = """
+                QPushButton {
+                    background-color: #f38ba8;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #eba0ac;
+                }
+                QPushButton:disabled {
+                    background-color: #313244;
+                    color: #6c7086;
+                }
+            """
+        else:
+            # Light theme styles
+            combobox_style = """
+                QComboBox {
+                    background-color: #ffffff;
+                    color: #333333;
+                    border: 1px solid #cccccc;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 14px;
+                }
+                QComboBox:hover {
+                    border-color: #1976D2;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                    padding-right: 8px;
+                }
+                QComboBox::down-arrow {
+                    image: none;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-top: 6px solid #333333;
+                    margin-right: 8px;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: #ffffff;
+                    color: #333333;
+                    selection-background-color: #e3f2fd;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                }
+            """
+            label_style = "color: #333333; font-size: 14px;"
+            lane_label_style = """
+                color: #2e7d32;
+                font-size: 14px;
+                font-weight: bold;
+                background-color: #e8f5e9;
+                padding: 8px 16px;
+                border-radius: 6px;
+            """
+            back_btn_style = """
+                QPushButton {
+                    background-color: #757575;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #616161;
+                }
+            """
+            calibrate_btn_style = """
+                QPushButton {
+                    background-color: #ff9800;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #f57c00;
+                }
+                QPushButton:disabled {
+                    background-color: #e0e0e0;
+                    color: #9e9e9e;
+                }
+            """
+            traffic_light_btn_style = """
+                QPushButton {
+                    background-color: #9c27b0;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #7b1fa2;
+                }
+                QPushButton:disabled {
+                    background-color: #e0e0e0;
+                    color: #9e9e9e;
+                }
+            """
+            play_btn_style = """
+                QPushButton {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #388e3c;
+                }
+                QPushButton:disabled {
+                    background-color: #e0e0e0;
+                    color: #9e9e9e;
+                }
+            """
+            stop_btn_style = """
+                QPushButton {
+                    background-color: #f44336;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #d32f2f;
+                }
+                QPushButton:disabled {
+                    background-color: #e0e0e0;
+                    color: #9e9e9e;
+                }
+            """
+        
+        # Apply styles to widgets
+        if hasattr(self, 'combo_num_lanes'):
+            self.combo_num_lanes.setStyleSheet(combobox_style)
+        if hasattr(self, 'combo_calib_mode'):
+            self.combo_calib_mode.setStyleSheet(combobox_style)
+        if hasattr(self, 'lbl_current_lane'):
+            self.lbl_current_lane.setStyleSheet(lane_label_style)
+        if hasattr(self, 'lbl_lane'):
+            self.lbl_lane.setStyleSheet(label_style)
+        if hasattr(self, 'lbl_mode'):
+            self.lbl_mode.setStyleSheet(label_style)
+        if hasattr(self, 'btn_back'):
+            self.btn_back.setStyleSheet(back_btn_style)
+        if hasattr(self, 'btn_calibrate'):
+            self.btn_calibrate.setStyleSheet(calibrate_btn_style)
+        if hasattr(self, 'btn_traffic_light'):
+            self.btn_traffic_light.setStyleSheet(traffic_light_btn_style)
+        if hasattr(self, 'btn_play'):
+            self.btn_play.setStyleSheet(play_btn_style)
+        if hasattr(self, 'btn_stop'):
+            self.btn_stop.setStyleSheet(stop_btn_style)
 
     def apply_theme(self):
         """Apply current theme"""

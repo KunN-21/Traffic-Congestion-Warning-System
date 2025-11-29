@@ -317,6 +317,47 @@ class VideoWidget(QWidget):
             vehicle_counts, road_area
         )
         
+        # Calculate per-lane density if multiple lanes
+        lane_densities = {}
+        num_lanes = self.calibration.get_num_lanes()
+        if num_lanes > 1 and self.calibration.calibration and self.calibration.calibration.lanes:
+            for lane_num in range(1, num_lanes + 1):
+                # Count vehicles in this lane
+                lane_vehicle_counts = {vtype: 0 for vtype in self.settings.VEHICLE_DIMENSIONS.keys()}
+                
+                for track in tracks:
+                    # Get center of bounding box
+                    x1, y1, x2, y2 = track['bbox']
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    
+                    # Check which lane this vehicle is in
+                    vehicle_lane = self.calibration.get_point_lane(center_x, center_y)
+                    if vehicle_lane == lane_num:
+                        vehicle_type = track['class']
+                        if vehicle_type in lane_vehicle_counts:
+                            lane_vehicle_counts[vehicle_type] += 1
+                
+                # Calculate density for this lane
+                lane_area = self.calibration.get_lane_area(lane_num)
+                lane_occupied_area, lane_density_pct = self.density_calculator.calculate_density(
+                    lane_vehicle_counts, lane_area
+                )
+                
+                # Get congestion level for this lane
+                lane_level, lane_status, lane_color = self.density_calculator.get_density_level(
+                    lane_density_pct
+                )
+                
+                lane_densities[f'lane{lane_num}'] = {
+                    'density_percentage': lane_density_pct,
+                    'occupied_area': lane_occupied_area,
+                    'vehicle_counts': lane_vehicle_counts,
+                    'congestion_level': lane_level,
+                    'congestion_status': lane_status,
+                    'congestion_color': lane_color
+                }
+        
         # Determine congestion status
         if skip_congestion:
             # Red/Yellow light detected - don't report congestion
@@ -343,7 +384,8 @@ class VideoWidget(QWidget):
             'congestion_color': color_bgr,
             'tracks': tracks,  # Full tracks for speed estimation
             'traffic_light_active': skip_congestion,  # Whether traffic light is red/yellow
-            'traffic_light_state': traffic_light_state.dominant_color if traffic_light_state else None
+            'traffic_light_state': traffic_light_state.dominant_color if traffic_light_state else None,
+            'lane_densities': lane_densities  # Per-lane density info
         }
         
         self.frame_processed.emit(stats)
@@ -384,6 +426,11 @@ class VideoWidget(QWidget):
             mode = self.calibration.get_mode()
             from ..core.calibration import CalibrationMode
             
+            # Get lane info for multi-lane mode
+            num_lanes = self.calibration.get_num_lanes()
+            current_lane = self.calibration.get_current_lane()
+            lane_info = f" - Lan {current_lane}/{num_lanes}" if num_lanes > 1 else ""
+            
             if mode == CalibrationMode.CIRCLE:
                 if self.is_dragging_circle:
                     text = "Keo chuot de chon BAN KINH - Tha chuot de hoan tat"
@@ -393,9 +440,9 @@ class VideoWidget(QWidget):
                     text = "Da chon vong tron"
             elif mode == CalibrationMode.POLYGON:
                 if points_left > 0:
-                    text = f"Click {points_left} diem nua de hoan tat VUNG QUAN SAT"
+                    text = f"Click {points_left} diem nua de hoan tat VUNG QUAN SAT{lane_info}"
                 else:
-                    text = "Da chon vung quan sat"
+                    text = f"Da chon vung quan sat{lane_info}"
             elif mode == CalibrationMode.ELLIPSE:
                 if current_points == 0:
                     text = "Click chon TAM VONG XOAY"
@@ -406,7 +453,7 @@ class VideoWidget(QWidget):
                 else:
                     text = "Da chon elip"
             else:
-                text = f"Click {points_left} diem nua"
+                text = f"Click {points_left} diem nua{lane_info}"
             
             cv2.putText(display_frame, text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
