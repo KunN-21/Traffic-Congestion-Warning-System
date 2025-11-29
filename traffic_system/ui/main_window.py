@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Hệ Thống Giám Sát Giao Thông - Traffic Monitoring System")
+        self.setWindowTitle("Hệ Thống Giám Sát Giao Thông")
         self.setGeometry(100, 100, 1600, 950)
         
         # Theme state - default to light mode
@@ -631,13 +631,6 @@ class MainWindow(QMainWindow):
         config_action = QAction("Cấu Hình Hệ Thống", self)
         config_action.triggered.connect(self.open_config_dialog)
         settings_menu.addAction(config_action)
-        
-        # Help menu
-        help_menu = menubar.addMenu("&Trợ Giúp")
-        
-        about_action = QAction("Về Phần Mềm", self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
     
     def setup_connections(self):
         """Setup signal connections"""
@@ -774,7 +767,7 @@ class MainWindow(QMainWindow):
             self,
             "Chọn Video",
             "",
-            "Video Files (*.mp4 *.avi *.mov *.mkv);;All Files (*.*)"
+            "File Video (*.mp4 *.avi *.mov *.mkv);;Tất cả File (*.*)"
         )
         
         if file_path:
@@ -789,23 +782,14 @@ class MainWindow(QMainWindow):
             conf_filter=self.settings.model.detection_conf_filter
         )
         
-        # Get tracker type from settings
-        tracker_type = getattr(self.settings.tracker, 'tracker_type', 'deepsort')
-        
+        # Initialize BoT-SORT tracker
         self.tracker = VehicleTracker(
-            tracker_type=tracker_type,
-            max_age=self.settings.tracker.max_age,
-            n_init=self.settings.tracker.n_init,
-            max_iou_distance=self.settings.tracker.max_iou_distance,
-            max_cosine_distance=self.settings.tracker.max_cosine_distance,
-            nn_budget=self.settings.tracker.nn_budget,
-            embedder=self.settings.tracker.embedder,
-            embedder_gpu=self.settings.tracker.embedder_gpu,
+            tracker_type="botsort",
             track_buffer=getattr(self.settings.tracker, 'track_buffer', 30),
             match_thresh=getattr(self.settings.tracker, 'match_thresh', 0.8)
         )
         
-        self.statusBar.showMessage(f"Đã khởi tạo Detector và Tracker ({tracker_type})")
+        self.statusBar.showMessage("Đã khởi tạo Detector và Tracker (BoT-SORT)")
     
     def on_num_lanes_changed(self, index: int):
         """Handle number of lanes change"""
@@ -1163,32 +1147,32 @@ class MainWindow(QMainWindow):
                 f"font-size: 20px; font-weight: bold; color: {color_str};"
             )
             
-            # Update density status display (LOW/MEDIUM/HIGH with percentage)
+            # Update density status display (Thấp/Trung bình/Cao with percentage)
             self.update_density_status(density_percentage, status, color)
         else:
             # No congestion status - still update based on percentage
             if density_percentage < 30:
-                status = 'LOW'
+                status = 'Thấp'
                 color = (0, 255, 0)  # Green
             elif density_percentage < 80:
-                status = 'MEDIUM'
-                color = (0, 255, 255)  # Yellow
+                status = 'Trung bình'
+                color = (0, 165, 255)  # Orange
             else:
-                status = 'HIGH'
+                status = 'Cao'
                 color = (0, 0, 255)  # Red
             self.update_density_status(density_percentage, status, color)
     
     def update_density_status(self, percentage: float, status: str, color: tuple):
-        """Update density status display with Low/Medium/High and percentage"""
-        # Status is now directly LOW/MEDIUM/HIGH from settings
-        display_status = status if status in ['LOW', 'MEDIUM', 'HIGH'] else '--'
+        """Update density status display with Thấp/Trung bình/Cao and percentage"""
+        # Status is now directly Thấp/Trung bình/Cao from settings
+        display_status = status if status in ['Thấp', 'Trung bình', 'Cao'] else '--'
         
         # Set status label with appropriate color
-        if display_status == 'LOW':
+        if display_status == 'Thấp':
             bg_color = '#4caf50'  # Green
-        elif display_status == 'MEDIUM':
+        elif display_status == 'Trung bình':
             bg_color = '#ff9800'  # Orange
-        elif display_status == 'HIGH':
+        elif display_status == 'Cao':
             bg_color = '#f44336'  # Red
         else:
             bg_color = '#6c7086'  # Gray
@@ -1248,13 +1232,13 @@ class MainWindow(QMainWindow):
             self,
             "Giới Thiệu",
             "<h2>Hệ Thống Giám Sát Giao Thông</h2>"
-            "<p><b>Traffic Monitoring System</b></p>"
-            "<p>Phiên bản 1.0.0</p>"
-            "<p>Sử dụng YOLO v11 và DeepSORT để phát hiện và theo dõi phương tiện.</p>"
+            "<p><b>Hệ Thống Giám Sát & Cảnh Báo Ùn Tắc</b></p>"
+            "<p>Phiên bản 2.0.0</p>"
+            "<p>Sử dụng YOLO v11 và BoT-SORT để phát hiện và theo dõi phương tiện.</p>"
             "<p>Tính toán mật độ giao thông dựa trên diện tích chiếm dụng.</p>"
             "<hr>"
             "<p>Công thức: R = (TL / DT) x 100</p>"
-            "<p>(c) 2025 - Đồ Án Tốt Nghiệp</p>"
+            "<p>© 2025 - Đồ Án Tốt Nghiệp</p>"
         )
     
     def closeEvent(self, event):

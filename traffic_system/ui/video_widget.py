@@ -617,11 +617,17 @@ class VideoWidget(QWidget):
                 edge_y = self.drag_center[1]
                 complete = self.calibration.add_point(edge_x, edge_y)
                 
+                logger.debug(f"Circle calibration: center={self.drag_center}, radius={self.drag_radius}, complete={complete}")
+                
                 self.is_dragging_circle = False
                 self.display_frame(self.current_frame)
                 
                 if complete:
                     self.finish_calibration()
+            else:
+                # Failed to get coordinates, cancel
+                logger.warning("Failed to get release coordinates for circle calibration")
+                self._cancel_calibration()
     
     def _get_image_coords(self, pos):
         """Convert widget position to image coordinates"""
@@ -652,6 +658,7 @@ class VideoWidget(QWidget):
         
         try:
             mode = self.calibration.get_mode()
+            logger.debug(f"Finishing calibration, mode: {mode}, points: {len(self.calibration.get_points())}")
             
             # For circle mode, ask for outer and inner radii
             if mode == CalibrationMode.CIRCLE:
@@ -694,6 +701,14 @@ class VideoWidget(QWidget):
                         self.display_frame(self.current_frame)
                     # Emit radii as length/width for display purposes
                     self.calibration_complete.emit(radius_outer, radius_inner)
+                else:
+                    # Calibration failed - show error and cancel
+                    QMessageBox.warning(
+                        self,
+                        "Lỗi Hiệu Chỉnh",
+                        "Không thể hoàn thành hiệu chỉnh vòng tròn.\nVui lòng thử lại."
+                    )
+                    self._cancel_calibration()
                 return
             
             # For other modes, ask for dimensions

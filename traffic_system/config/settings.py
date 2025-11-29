@@ -28,17 +28,9 @@ class ModelConfig:
 
 @dataclass
 class TrackerConfig:
-    """DeepSORT Tracker Configuration"""
-    tracker_type: str = "deepsort_mobilenet"  # Options: deepsort_mobilenet, botsort, bytetrack
-    # DeepSORT parameters
-    max_age: int = 30
-    n_init: int = 10
-    max_iou_distance: float = 0.7
-    max_cosine_distance: float = 0.25
-    nn_budget: int = 70
-    embedder: str = "mobilenet"
-    embedder_gpu: bool = True
-    # BotSORT/ByteTrack parameters
+    """BoT-SORT Tracker Configuration"""
+    tracker_type: str = "botsort"
+    # BoT-SORT parameters
     track_high_thresh: float = 0.5
     track_low_thresh: float = 0.1
     new_track_thresh: float = 0.6
@@ -51,11 +43,6 @@ class TrackerConfig:
     appearance_thresh: float = 0.25
     with_reid: bool = False  # Enable ReID (better tracking with occlusion, slower)
     reid_model: str = "auto"  # ReID model: auto, yolo11n-cls.pt, etc.
-    # DeepSORT ReID optimization
-    reid_frequency: int = 3
-    batch_reid: bool = True
-    max_reid_batch_size: int = 32
-    use_kalman_prediction: bool = True
 
 
 @dataclass
@@ -137,9 +124,9 @@ class Settings:
     
     # Density Thresholds
     DENSITY_THRESHOLDS = [
-        DensityThreshold('Thấp', 30.0, 'LOW', (0, 255, 0)),
-        DensityThreshold('Trung bình', 80.0, 'MEDIUM', (0, 255, 255)),
-        DensityThreshold('Cao', float('inf'), 'HIGH', (0, 0, 255))
+        DensityThreshold('Thấp', 30.0, 'Thấp', (0, 255, 0)),
+        DensityThreshold('Trung bình', 80.0, 'Trung bình', (0, 165, 255)),  # Orange (better visibility)
+        DensityThreshold('Cao', float('inf'), 'Cao', (0, 0, 255))
     ]
     
     # Calibration Display

@@ -268,6 +268,26 @@ class CalibrationManager:
         # Calculate area: π(r1² - r2²)
         road_area = np.pi * (radius_outer**2 - radius_inner**2)
         
+        # Create polygon for detection region
+        if self.mode == CalibrationMode.CIRCLE:
+            self.polygon = self._create_circle_polygon()
+        elif self.mode == CalibrationMode.ELLIPSE:
+            self.polygon = self._create_ellipse_polygon()
+        else:
+            self.polygon = np.array(self.calibration_points, dtype=np.int32)
+        
+        # Add to lanes_data for multi-lane support
+        lane_data = {
+            'lane_id': self.current_lane + 1,
+            'points': self.calibration_points.copy(),
+            'road_length_meters': radius_outer,
+            'road_width_meters': radius_inner,
+            'road_area_meters': road_area,
+            'polygon': self.polygon.tolist() if self.polygon is not None else None
+        }
+        self.lanes_data.append(lane_data)
+        self.all_polygons.append(self.polygon)
+        
         # Create calibration data with radii
         self.calibration = CalibrationData(
             points=self.calibration_points.copy(),
@@ -281,16 +301,10 @@ class CalibrationManager:
             radius_outer=radius_outer,
             radius_inner=radius_inner,
             axes=self.axes,
-            angle=self.angle
+            angle=self.angle,
+            num_lanes=self.num_lanes,
+            lanes=self.lanes_data.copy()
         )
-        
-        # Create polygon for detection region
-        if self.mode == CalibrationMode.CIRCLE:
-            self.polygon = self._create_circle_polygon()
-        elif self.mode == CalibrationMode.ELLIPSE:
-            self.polygon = self._create_ellipse_polygon()
-        else:
-            self.polygon = np.array(self.calibration_points, dtype=np.int32)
         
         logger.info(f"Calibration complete! Mode: {self.mode.value}")
         logger.info(f"  Outer radius (r1): {radius_outer:.2f} m")

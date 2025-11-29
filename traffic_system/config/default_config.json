@@ -2,7 +2,7 @@
   "model": {
     "model_path": "Model/best_v2.pt",
     "conf_threshold": 0.5,
-    "iou_threshold": 0.6,
+    "iou_threshold": 0.5,
     "detection_conf_filter": 0.4,
     "imgsz": 640,
     "half": true,
@@ -11,13 +11,6 @@
   },
   "tracker": {
     "tracker_type": "botsort",
-    "max_age": 30,
-    "n_init": 10,
-    "max_iou_distance": 0.7,
-    "max_cosine_distance": 0.25,
-    "nn_budget": 70,
-    "embedder": "mobilenet",
-    "embedder_gpu": true,
     "track_high_thresh": 0.5,
     "track_low_thresh": 0.1,
     "new_track_thresh": 0.6,
@@ -28,11 +21,7 @@
     "proximity_thresh": 0.5,
     "appearance_thresh": 0.25,
     "with_reid": true,
-    "reid_model": "yolo11m-cls.pt",
-    "reid_frequency": 3,
-    "batch_reid": true,
-    "max_reid_batch_size": 32,
-    "use_kalman_prediction": true
+    "reid_model": "yolo11m-cls.pt"
   },
   "calibration": {
     "require_real_dimensions": true,

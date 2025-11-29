@@ -313,7 +313,7 @@ class VideoSelectorWidget(QWidget):
         """)
         title_section.addWidget(self.main_title)
         
-        self.sub_title = QLabel("Traffic Monitoring & Congestion Warning System")
+        self.sub_title = QLabel("Hệ Thống Giám Sát & Cảnh Báo Ùn Tắc")
         self.sub_title.setStyleSheet("""
             font-size: 16px;
             color: rgba(255, 255, 255, 0.9);
@@ -425,7 +425,7 @@ class VideoSelectorWidget(QWidget):
         
         footer_layout.addStretch()
         
-        self.version_label = QLabel("v2.0.0 | YOLO v11 + DeepSORT")
+        self.version_label = QLabel("v2.0.0 | YOLO v11 + BoT-SORT")
         # Style set in apply_theme
         footer_layout.addWidget(self.version_label)
         
@@ -509,7 +509,7 @@ class VideoSelectorWidget(QWidget):
             self,
             "Chọn Video",
             "",
-            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv);;All Files (*.*)"
+            "File Video (*.mp4 *.avi *.mov *.mkv *.wmv);;Tất cả File (*.*)"
         )
         
         if file_path:

@@ -17,7 +17,7 @@ class ConfigDialog(QDialog):
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
         self.settings = settings
-        self.setWindowTitle("Cấu Hình Hệ Thống - System Configuration")
+        self.setWindowTitle("Cấu Hình Hệ Thống")
         self.setMinimumSize(600, 500)
         
         self.setup_ui()
@@ -134,8 +134,8 @@ class ConfigDialog(QDialog):
         
         # Tabs
         tabs = QTabWidget()
-        tabs.addTab(self.create_model_tab(), "Model")
-        tabs.addTab(self.create_tracker_tab(), "Tracker")
+        tabs.addTab(self.create_model_tab(), "Model AI")
+        tabs.addTab(self.create_tracker_tab(), "Bộ Theo Dõi")
         tabs.addTab(self.create_calibration_tab(), "Hiệu Chỉnh")
         tabs.addTab(self.create_video_tab(), "Video")
         
@@ -166,7 +166,7 @@ class ConfigDialog(QDialog):
         layout = QFormLayout(widget)
         
         # Model selection group
-        model_group = QGroupBox("Model Selection")
+        model_group = QGroupBox("Lựa Chọn Model")
         model_layout = QFormLayout(model_group)
         
         # Model path with browse button
@@ -189,7 +189,7 @@ class ConfigDialog(QDialog):
         layout.addWidget(model_group)
         
         # Detection settings group
-        detection_group = QGroupBox("Detection Settings")
+        detection_group = QGroupBox("Cài Đặt Phát Hiện")
         detection_layout = QFormLayout(detection_group)
         
         # Confidence threshold
@@ -222,16 +222,14 @@ class ConfigDialog(QDialog):
         self.spin_imgsz.setSingleStep(32)
         self.spin_imgsz.setValue(self.settings.model.imgsz)
         self.spin_imgsz.setToolTip("Kích thước ảnh inference (phải chia hết cho 32)")
-        detection_layout.addRow("Inference Size:", self.spin_imgsz)
-        
+        detection_layout.addRow("Kích thước Inference:", self.spin_imgsz)
+
         # Max detections
         self.spin_max_det = QSpinBox()
         self.spin_max_det.setRange(10, 500)
         self.spin_max_det.setValue(self.settings.model.max_det)
         self.spin_max_det.setToolTip("Số detection tối đa mỗi frame")
-        detection_layout.addRow("Max Detections:", self.spin_max_det)
-        
-        # FP16 inference
+        detection_layout.addRow("Số Detection Tối Đa:", self.spin_max_det)        # FP16 inference
         self.check_half = QCheckBox("Sử dụng FP16 (Half precision)")
         self.check_half.setChecked(self.settings.model.half)
         self.check_half.setToolTip("Tăng tốc inference trên GPU, có thể giảm độ chính xác nhẹ")
@@ -275,82 +273,34 @@ class ConfigDialog(QDialog):
             self,
             "Chọn Model YOLO",
             "Model/",
-            "YOLO Model (*.pt);;All Files (*)"
+            "Model YOLO (*.pt);;Tất cả File (*)"
         )
         if file_path:
             self.edit_model_path.setText(file_path)
-        
-        return widget
     
     def create_tracker_tab(self):
-        """Create tracker configuration tab"""
+        """Create tracker configuration tab - BoT-SORT only"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        # Tracker Type Selection
-        type_group = QGroupBox("Loại Tracker")
-        type_layout = QFormLayout(type_group)
+        # Tracker info
+        info_group = QGroupBox("Thông Tin Tracker")
+        info_layout = QFormLayout(info_group)
         
-        self.combo_tracker_type = QComboBox()
-        self.combo_tracker_type.addItem("DeepSORT + MobileNet (Khuyến nghị)", "deepsort_mobilenet")
-        self.combo_tracker_type.addItem("BoT-SORT (YOLO + ReID)", "botsort")
-        self.combo_tracker_type.addItem("ByteTrack (YOLO - Nhanh)", "bytetrack")
+        info_label = QLabel("BoT-SORT (YOLO built-in)")
+        info_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        info_layout.addRow("Tracker:", info_label)
         
-        # Set current selection
-        current_type = getattr(self.settings.tracker, 'tracker_type', 'deepsort_mobilenet')
-        index = self.combo_tracker_type.findData(current_type)
-        if index >= 0:
-            self.combo_tracker_type.setCurrentIndex(index)
+        desc_label = QLabel("Theo dõi tích hợp YOLO với GMC và ReID (tùy chọn). Cân bằng giữa tốc độ và độ chính xác.")
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #666666; font-style: italic;")
+        info_layout.addRow("", desc_label)
         
-        self.combo_tracker_type.currentIndexChanged.connect(self.on_tracker_type_changed)
-        type_layout.addRow("Tracker:", self.combo_tracker_type)
+        layout.addWidget(info_group)
         
-        # Tracker description
-        self.lbl_tracker_desc = QLabel()
-        self.lbl_tracker_desc.setWordWrap(True)
-        self.lbl_tracker_desc.setStyleSheet("color: #666666; font-style: italic;")
-        type_layout.addRow("", self.lbl_tracker_desc)
-        
-        layout.addWidget(type_group)
-        
-        # DeepSORT Settings
-        self.deepsort_group = QGroupBox("DeepSORT Settings")
-        deepsort_layout = QFormLayout(self.deepsort_group)
-        
-        self.spin_max_age = QSpinBox()
-        self.spin_max_age.setRange(10, 200)
-        self.spin_max_age.setValue(getattr(self.settings.tracker, 'max_age', 50))
-        self.spin_max_age.setToolTip("Số frame giữ track khi mất detection")
-        deepsort_layout.addRow("Max Age (frames):", self.spin_max_age)
-        
-        self.spin_n_init = QSpinBox()
-        self.spin_n_init.setRange(1, 20)
-        self.spin_n_init.setValue(getattr(self.settings.tracker, 'n_init', 3))
-        self.spin_n_init.setToolTip("Số frame để xác nhận track mới")
-        deepsort_layout.addRow("N Init (frames):", self.spin_n_init)
-        
-        self.spin_max_cos_dist = QDoubleSpinBox()
-        self.spin_max_cos_dist.setRange(0.1, 1.0)
-        self.spin_max_cos_dist.setSingleStep(0.05)
-        self.spin_max_cos_dist.setValue(getattr(self.settings.tracker, 'max_cosine_distance', 0.3))
-        self.spin_max_cos_dist.setToolTip("Ngưỡng cosine distance cho Re-ID (cao hơn = dễ match)")
-        deepsort_layout.addRow("Max Cosine Distance:", self.spin_max_cos_dist)
-        
-        self.spin_nn_budget = QSpinBox()
-        self.spin_nn_budget.setRange(50, 300)
-        self.spin_nn_budget.setValue(getattr(self.settings.tracker, 'nn_budget', 100))
-        self.spin_nn_budget.setToolTip("Số features lưu cho mỗi track (cao hơn = ổn định hơn)")
-        deepsort_layout.addRow("NN Budget:", self.spin_nn_budget)
-        
-        self.check_embedder_gpu = QCheckBox("Sử dụng GPU cho Embedder")
-        self.check_embedder_gpu.setChecked(getattr(self.settings.tracker, 'embedder_gpu', True))
-        deepsort_layout.addRow("", self.check_embedder_gpu)
-        
-        layout.addWidget(self.deepsort_group)
-        
-        # YOLO Tracker Settings (BoT-SORT / ByteTrack)
-        self.yolo_group = QGroupBox("YOLO Tracker Settings (BoT-SORT / ByteTrack)")
-        yolo_layout = QFormLayout(self.yolo_group)
+        # BoT-SORT Tracking Settings
+        tracking_group = QGroupBox("Cài Đặt Theo Dõi")
+        tracking_layout = QFormLayout(tracking_group)
         
         # Track thresholds
         self.spin_track_high_thresh = QDoubleSpinBox()
@@ -358,65 +308,65 @@ class ConfigDialog(QDialog):
         self.spin_track_high_thresh.setSingleStep(0.05)
         self.spin_track_high_thresh.setValue(getattr(self.settings.tracker, 'track_high_thresh', 0.5))
         self.spin_track_high_thresh.setToolTip("Ngưỡng confidence cao cho first association")
-        yolo_layout.addRow("Track High Thresh:", self.spin_track_high_thresh)
+        tracking_layout.addRow("Ngưỡng Cao:", self.spin_track_high_thresh)
         
         self.spin_track_low_thresh = QDoubleSpinBox()
         self.spin_track_low_thresh.setRange(0.0, 0.5)
         self.spin_track_low_thresh.setSingleStep(0.05)
         self.spin_track_low_thresh.setValue(getattr(self.settings.tracker, 'track_low_thresh', 0.1))
         self.spin_track_low_thresh.setToolTip("Ngưỡng confidence thấp cho second association")
-        yolo_layout.addRow("Track Low Thresh:", self.spin_track_low_thresh)
+        tracking_layout.addRow("Ngưỡng Thấp:", self.spin_track_low_thresh)
         
         self.spin_new_track_thresh = QDoubleSpinBox()
         self.spin_new_track_thresh.setRange(0.1, 1.0)
         self.spin_new_track_thresh.setSingleStep(0.05)
         self.spin_new_track_thresh.setValue(getattr(self.settings.tracker, 'new_track_thresh', 0.6))
         self.spin_new_track_thresh.setToolTip("Ngưỡng confidence để tạo track mới")
-        yolo_layout.addRow("New Track Thresh:", self.spin_new_track_thresh)
+        tracking_layout.addRow("Ngưỡng Track Mới:", self.spin_new_track_thresh)
         
         self.spin_track_buffer = QSpinBox()
         self.spin_track_buffer.setRange(10, 120)
         self.spin_track_buffer.setValue(getattr(self.settings.tracker, 'track_buffer', 30))
         self.spin_track_buffer.setToolTip("Số frame giữ track khi mất detection")
-        yolo_layout.addRow("Track Buffer (frames):", self.spin_track_buffer)
+        tracking_layout.addRow("Bộ Đệm (frames):", self.spin_track_buffer)
         
         self.spin_match_thresh = QDoubleSpinBox()
         self.spin_match_thresh.setRange(0.5, 1.0)
         self.spin_match_thresh.setSingleStep(0.05)
         self.spin_match_thresh.setValue(getattr(self.settings.tracker, 'match_thresh', 0.8))
         self.spin_match_thresh.setToolTip("Ngưỡng matching (IOU threshold)")
-        yolo_layout.addRow("Match Thresh:", self.spin_match_thresh)
+        tracking_layout.addRow("Ngưỡng Khớp:", self.spin_match_thresh)
         
-        layout.addWidget(self.yolo_group)
+        layout.addWidget(tracking_group)
         
-        # BoT-SORT specific settings
-        self.botsort_group = QGroupBox("BoT-SORT Settings (GMC & ReID)")
-        botsort_layout = QFormLayout(self.botsort_group)
+        # GMC & ReID settings
+        gmc_reid_group = QGroupBox("Cài Đặt GMC & ReID")
+        gmc_reid_layout = QFormLayout(gmc_reid_group)
         
         # GMC Method
         self.combo_gmc_method = QComboBox()
         self.combo_gmc_method.addItem("Sparse Optical Flow (Khuyến nghị)", "sparseOptFlow")
-        self.combo_gmc_method.addItem("ORB Features", "orb")
-        self.combo_gmc_method.addItem("SIFT Features", "sift")
-        self.combo_gmc_method.addItem("ECC (Enhanced Correlation)", "ecc")
+        self.combo_gmc_method.addItem("Đặc trưng ORB", "orb")
+        self.combo_gmc_method.addItem("Đặc trưng SIFT", "sift")
+        self.combo_gmc_method.addItem("ECC (Tương quan nâng cao)", "ecc")
         self.combo_gmc_method.addItem("Tắt GMC", "None")
         current_gmc = getattr(self.settings.tracker, 'gmc_method', 'sparseOptFlow')
         idx = self.combo_gmc_method.findData(current_gmc)
         if idx >= 0:
             self.combo_gmc_method.setCurrentIndex(idx)
-        self.combo_gmc_method.setToolTip("Phương pháp Global Motion Compensation")
-        botsort_layout.addRow("GMC Method:", self.combo_gmc_method)
+        self.combo_gmc_method.setToolTip("Phương pháp Global Motion Compensation (bù chuyển động camera)")
+        gmc_reid_layout.addRow("Phương Pháp GMC:", self.combo_gmc_method)
         
         # ReID settings
         self.check_with_reid = QCheckBox("Bật Re-Identification (ReID)")
         self.check_with_reid.setChecked(getattr(self.settings.tracker, 'with_reid', False))
-        self.check_with_reid.setToolTip("ReID giúp tracking tốt hơn khi có occlusion, nhưng chậm hơn")
+        self.check_with_reid.setToolTip("ReID giúp tracking tốt hơn khi có che khuất, nhưng chậm hơn")
         self.check_with_reid.stateChanged.connect(self.on_reid_changed)
-        botsort_layout.addRow("", self.check_with_reid)
+        gmc_reid_layout.addRow("", self.check_with_reid)
         
         # ReID Model
         self.combo_reid_model = QComboBox()
-        self.combo_reid_model.addItem("Auto (Native YOLO features)", "auto")
+        self.combo_reid_model.addItem("Tự động (Native YOLO features)", "auto")
         self.combo_reid_model.addItem("YOLO11n-cls (Nhỏ, nhanh)", "yolo11n-cls.pt")
         self.combo_reid_model.addItem("YOLO11s-cls (Cân bằng)", "yolo11s-cls.pt")
         self.combo_reid_model.addItem("YOLO11m-cls (Chính xác)", "yolo11m-cls.pt")
@@ -425,23 +375,23 @@ class ConfigDialog(QDialog):
         if idx >= 0:
             self.combo_reid_model.setCurrentIndex(idx)
         self.combo_reid_model.setToolTip("Model cho Re-Identification")
-        botsort_layout.addRow("ReID Model:", self.combo_reid_model)
+        gmc_reid_layout.addRow("Model ReID:", self.combo_reid_model)
         
         self.spin_proximity_thresh = QDoubleSpinBox()
         self.spin_proximity_thresh.setRange(0.1, 1.0)
         self.spin_proximity_thresh.setSingleStep(0.05)
         self.spin_proximity_thresh.setValue(getattr(self.settings.tracker, 'proximity_thresh', 0.5))
         self.spin_proximity_thresh.setToolTip("Ngưỡng IoU tối thiểu cho ReID matching")
-        botsort_layout.addRow("Proximity Thresh:", self.spin_proximity_thresh)
+        gmc_reid_layout.addRow("Ngưỡng Proximity:", self.spin_proximity_thresh)
         
         self.spin_appearance_thresh = QDoubleSpinBox()
         self.spin_appearance_thresh.setRange(0.1, 1.0)
         self.spin_appearance_thresh.setSingleStep(0.05)
         self.spin_appearance_thresh.setValue(getattr(self.settings.tracker, 'appearance_thresh', 0.25))
         self.spin_appearance_thresh.setToolTip("Ngưỡng appearance similarity cho ReID")
-        botsort_layout.addRow("Appearance Thresh:", self.spin_appearance_thresh)
+        gmc_reid_layout.addRow("Ngưỡng Appearance:", self.spin_appearance_thresh)
         
-        layout.addWidget(self.botsort_group)
+        layout.addWidget(gmc_reid_group)
         
         # Note
         note_label = QLabel("⚠️ Thay đổi cài đặt Tracker cần khởi tạo lại video")
@@ -450,8 +400,7 @@ class ConfigDialog(QDialog):
         
         layout.addStretch()
         
-        # Update description and visibility
-        self.on_tracker_type_changed()
+        # Initialize ReID state
         self.on_reid_changed()
         
         return widget
@@ -462,39 +411,6 @@ class ConfigDialog(QDialog):
         self.combo_reid_model.setEnabled(reid_enabled)
         self.spin_proximity_thresh.setEnabled(reid_enabled)
         self.spin_appearance_thresh.setEnabled(reid_enabled)
-    
-    def on_tracker_type_changed(self):
-        """Handle tracker type change"""
-        tracker_type = self.combo_tracker_type.currentData()
-        
-        descriptions = {
-            "deepsort_mobilenet": (
-                "DeepSORT + MobileNet: Re-ID ổn định với độ chính xác cao. "
-                "Phù hợp cho vehicle tracking, khuyến nghị sử dụng."
-            ),
-            "botsort": (
-                "BoT-SORT: YOLO built-in tracking với GMC và ReID (tùy chọn). "
-                "Cân bằng giữa tốc độ và độ chính xác."
-            ),
-            "bytetrack": (
-                "ByteTrack: YOLO built-in, nhanh nhất. "
-                "Không có ReID, phù hợp video đơn giản, ít occlusion."
-            ),
-        }
-        
-        self.lbl_tracker_desc.setText(descriptions.get(tracker_type, ""))
-        
-        # Show/hide appropriate settings
-        is_deepsort = tracker_type == "deepsort_mobilenet"
-        is_botsort = tracker_type == "botsort"
-        is_yolo = tracker_type in ("botsort", "bytetrack")
-        
-        self.deepsort_group.setVisible(is_deepsort)
-        self.deepsort_group.setEnabled(is_deepsort)
-        self.yolo_group.setVisible(is_yolo)
-        self.yolo_group.setEnabled(is_yolo)
-        self.botsort_group.setVisible(is_botsort)
-        self.botsort_group.setEnabled(is_botsort)
     
     def create_calibration_tab(self):
         """Create calibration configuration tab"""
@@ -540,28 +456,28 @@ class ConfigDialog(QDialog):
         self.spin_frame_skip = QSpinBox()
         self.spin_frame_skip.setRange(1, 10)
         self.spin_frame_skip.setValue(self.settings.video.frame_skip)
-        layout.addRow("Frame Skip:", self.spin_frame_skip)
-        
+        layout.addRow("Bỏ Qua Frame:", self.spin_frame_skip)
+
         # FPS limit
         self.spin_fps_limit = QSpinBox()
         self.spin_fps_limit.setRange(0, 120)
         self.spin_fps_limit.setSpecialValueText("Không giới hạn")
         self.spin_fps_limit.setValue(self.settings.video.fps_limit or 0)
-        layout.addRow("Giới hạn FPS:", self.spin_fps_limit)
-        
+        layout.addRow("Giới Hạn FPS:", self.spin_fps_limit)
+
         # Process resize width
         self.spin_resize = QSpinBox()
         self.spin_resize.setRange(0, 1920)
         self.spin_resize.setSpecialValueText("Không resize")
         self.spin_resize.setValue(self.settings.video.process_resize_width or 0)
-        layout.addRow("Resize Width:", self.spin_resize)
-        
+        layout.addRow("Độ Rộng Resize:", self.spin_resize)
+
         # Wait key ms
         self.spin_wait_key = QSpinBox()
         self.spin_wait_key.setRange(1, 100)
         self.spin_wait_key.setSuffix(" ms")
         self.spin_wait_key.setValue(self.settings.video.wait_key_ms)
-        layout.addRow("Wait Key Delay:", self.spin_wait_key)
+        layout.addRow("Độ Trễ Phím:", self.spin_wait_key)      
         
         return widget
     
@@ -576,24 +492,15 @@ class ConfigDialog(QDialog):
         self.settings.model.max_det = self.spin_max_det.value()
         self.settings.model.half = self.check_half.isChecked()
         
-        # Tracker type
-        self.settings.tracker.tracker_type = self.combo_tracker_type.currentData()
-        
-        # DeepSORT settings
-        self.settings.tracker.max_age = self.spin_max_age.value()
-        self.settings.tracker.n_init = self.spin_n_init.value()
-        self.settings.tracker.max_cosine_distance = self.spin_max_cos_dist.value()
-        self.settings.tracker.nn_budget = self.spin_nn_budget.value()
-        self.settings.tracker.embedder_gpu = self.check_embedder_gpu.isChecked()
-        
-        # YOLO tracker settings (BoT-SORT / ByteTrack)
+        # BoT-SORT tracker settings
+        self.settings.tracker.tracker_type = "botsort"
         self.settings.tracker.track_high_thresh = self.spin_track_high_thresh.value()
         self.settings.tracker.track_low_thresh = self.spin_track_low_thresh.value()
         self.settings.tracker.new_track_thresh = self.spin_new_track_thresh.value()
         self.settings.tracker.track_buffer = self.spin_track_buffer.value()
         self.settings.tracker.match_thresh = self.spin_match_thresh.value()
         
-        # BoT-SORT specific
+        # BoT-SORT GMC & ReID
         self.settings.tracker.gmc_method = self.combo_gmc_method.currentData()
         self.settings.tracker.with_reid = self.check_with_reid.isChecked()
         self.settings.tracker.reid_model = self.combo_reid_model.currentData()

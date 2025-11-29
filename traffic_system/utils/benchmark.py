@@ -111,10 +111,9 @@ class Benchmarker:
         )
         
         tracker = VehicleTracker(
-            max_age=self.settings.tracker.max_age,
-            n_init=self.settings.tracker.n_init,
-            max_iou_distance=self.settings.tracker.max_iou_distance,
-            max_cosine_distance=self.settings.tracker.max_cosine_distance
+            tracker_type=self.settings.tracker.tracker_type,
+            track_buffer=self.settings.tracker.track_buffer,
+            match_thresh=self.settings.tracker.match_thresh
         )
         
         # Open video
