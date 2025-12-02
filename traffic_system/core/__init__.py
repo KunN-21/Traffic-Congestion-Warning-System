@@ -5,7 +5,6 @@ from .tracker import VehicleTracker
 from .calibration import CalibrationManager, CalibrationMode, CalibrationData
 from .density_calculator import DensityCalculator
 from .video_thread import VideoProcessingThread
-from .traffic_light_detector import TrafficLightDetector, TrafficLightState
 
 __all__ = [
     'VehicleDetector', 
@@ -14,7 +13,5 @@ __all__ = [
     'CalibrationMode',
     'CalibrationData',
     'DensityCalculator',
-    'VideoProcessingThread',
-    'TrafficLightDetector',
-    'TrafficLightState'
+    'VideoProcessingThread'
 ]

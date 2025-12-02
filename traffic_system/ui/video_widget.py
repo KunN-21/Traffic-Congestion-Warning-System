@@ -16,7 +16,6 @@ from ..core.detector import VehicleDetector
 from ..core.tracker import VehicleTracker
 from ..core.calibration import CalibrationManager
 from ..core.density_calculator import DensityCalculator
-from ..core.traffic_light_detector import TrafficLightDetector
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,16 +28,12 @@ class VideoWidget(QWidget):
     calibration_complete = pyqtSignal(float, float)  # Emit (road_length, road_width)
     calibration_cancelled = pyqtSignal()  # Emit when calibration is cancelled
     position_changed = pyqtSignal(int, int, float)  # Emit (current_frame, total_frames, fps)
-    traffic_light_calibration_complete = pyqtSignal()  # Emit when traffic light ROI is set
     
     def __init__(self, settings: Settings, calibration: CalibrationManager, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.calibration = calibration
         self.density_calculator = DensityCalculator(settings)
-        
-        # Traffic light detector
-        self.traffic_light_detector = TrafficLightDetector()
         
         # Video components
         self.cap = None
@@ -48,7 +43,6 @@ class VideoWidget(QWidget):
         # State
         self.is_playing = False
         self.is_calibrating = False
-        self.is_calibrating_traffic_light = False  # New state for traffic light calibration
         self.current_frame = None
         self.frame_count = 0
         self.total_frames = 0
@@ -208,15 +202,6 @@ class VideoWidget(QWidget):
         if not self.calibration.calibration:
             return frame
         
-        # Check traffic light state first
-        traffic_light_state = None
-        skip_congestion = False
-        if self.traffic_light_detector.is_enabled:
-            traffic_light_state = self.traffic_light_detector.detect(frame)
-            skip_congestion = traffic_light_state.should_skip_congestion_check
-            # Draw traffic light ROI
-            frame = self.traffic_light_detector.draw_roi(frame, traffic_light_state)
-        
         # Check if using YOLO integrated tracker (botsort/bytetrack)
         is_yolo_tracker = hasattr(self.tracker, 'tracker_type') and \
                           self.tracker.tracker_type in ['botsort', 'bytetrack']
@@ -359,20 +344,9 @@ class VideoWidget(QWidget):
                 }
         
         # Determine congestion status
-        if skip_congestion:
-            # Red/Yellow light detected - don't report congestion
-            level_name = "NORMAL"
-            if traffic_light_state.is_red:
-                status_text = "DEN DO - Khong xet ket xe"
-                color_bgr = (0, 0, 255)  # Red
-            else:
-                status_text = "DEN VANG - Khong xet ket xe"
-                color_bgr = (0, 255, 255)  # Yellow
-        else:
-            # Normal congestion detection
-            level_name, status_text, color_bgr = self.density_calculator.get_density_level(
-                density_percentage
-            )
+        level_name, status_text, color_bgr = self.density_calculator.get_density_level(
+            density_percentage
+        )
         
         # Emit statistics to side panel (no overlay on video)
         stats = {
@@ -383,8 +357,6 @@ class VideoWidget(QWidget):
             'congestion_status': status_text,
             'congestion_color': color_bgr,
             'tracks': tracks,  # Full tracks for speed estimation
-            'traffic_light_active': skip_congestion,  # Whether traffic light is red/yellow
-            'traffic_light_state': traffic_light_state.dominant_color if traffic_light_state else None,
             'lane_densities': lane_densities  # Per-lane density info
         }
         
@@ -458,17 +430,6 @@ class VideoWidget(QWidget):
             cv2.putText(display_frame, text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         
-        # If calibrating traffic light ROI
-        elif self.is_calibrating_traffic_light:
-            display_frame = self.traffic_light_detector.draw_points(display_frame)
-            
-            # Draw instruction
-            points_left = 4 - len(self.traffic_light_detector.get_points())
-            if points_left > 0:
-                text = f"Click {points_left} diem nua de chon VUNG DEN GIAO THONG"
-                cv2.putText(display_frame, text, (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
-        
         # Convert to RGB
         rgb_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
@@ -490,7 +451,6 @@ class VideoWidget(QWidget):
     def start_calibration(self):
         """Start calibration mode"""
         self.is_calibrating = True
-        self.is_calibrating_traffic_light = False
         self.calibration.reset()
         self.pause()
         
@@ -503,26 +463,9 @@ class VideoWidget(QWidget):
         if self.current_frame is not None:
             self.display_frame(self.current_frame)
     
-    def start_traffic_light_calibration(self):
-        """Start traffic light ROI calibration mode"""
-        self.is_calibrating_traffic_light = True
-        self.is_calibrating = False
-        self.traffic_light_detector.reset()
-        self.pause()
-        
-        # Show first frame for calibration
-        if self.current_frame is not None:
-            self.display_frame(self.current_frame)
-    
-    def clear_traffic_light_roi(self):
-        """Clear traffic light ROI"""
-        self.traffic_light_detector.clear_roi()
-        if self.current_frame is not None:
-            self.display_frame(self.current_frame)
-    
     def mouse_press_event(self, event):
         """Handle mouse press for calibration"""
-        if not self.is_calibrating and not self.is_calibrating_traffic_light:
+        if not self.is_calibrating:
             return
         
         if event.button() == Qt.MouseButton.LeftButton:
@@ -535,40 +478,28 @@ class VideoWidget(QWidget):
             # Ensure within bounds
             if 0 <= click_x < self.current_frame.shape[1] and 0 <= click_y < self.current_frame.shape[0]:
                 
-                if self.is_calibrating:
-                    from ..core.calibration import CalibrationMode
-                    mode = self.calibration.get_mode()
-                    
-                    # For circle mode, start drag operation
-                    if mode == CalibrationMode.CIRCLE and len(self.calibration.get_points()) == 0:
-                        self.is_dragging_circle = True
-                        self.drag_center = (click_x, click_y)
-                        self.drag_radius = 0
-                        # Add center point
-                        self.calibration.add_point(click_x, click_y)
-                        self.display_frame(self.current_frame)
-                        return
-                    
-                    # Add road calibration point
-                    complete = self.calibration.add_point(click_x, click_y)
-                    
-                    # Update display
-                    self.display_frame(self.current_frame)
-                    
-                    # If points complete, ask for dimensions
-                    if complete:
-                        self.finish_calibration()
+                from ..core.calibration import CalibrationMode
+                mode = self.calibration.get_mode()
                 
-                elif self.is_calibrating_traffic_light:
-                    # Add traffic light ROI point
-                    complete = self.traffic_light_detector.add_point(click_x, click_y)
-                    
-                    # Update display
+                # For circle mode, start drag operation
+                if mode == CalibrationMode.CIRCLE and len(self.calibration.get_points()) == 0:
+                    self.is_dragging_circle = True
+                    self.drag_center = (click_x, click_y)
+                    self.drag_radius = 0
+                    # Add center point
+                    self.calibration.add_point(click_x, click_y)
                     self.display_frame(self.current_frame)
-                    
-                    # If 4 points added, finish
-                    if complete:
-                        self.finish_traffic_light_calibration()
+                    return
+                
+                # Add road calibration point
+                complete = self.calibration.add_point(click_x, click_y)
+                
+                # Update display
+                self.display_frame(self.current_frame)
+                
+                # If points complete, ask for dimensions
+                if complete:
+                    self.finish_calibration()
     
     def mouse_move_event(self, event):
         """Handle mouse move for circle drag calibration"""
@@ -778,38 +709,10 @@ class VideoWidget(QWidget):
         self.calibration_cancelled.emit()
         logger.info("Calibration cancelled by user")
     
-    def finish_traffic_light_calibration(self):
-        """Finish traffic light ROI calibration"""
-        self.is_calibrating_traffic_light = False
-        
-        QMessageBox.information(
-            self,
-            "Hoàn tất",
-            "Đã thiết lập vùng phát hiện đèn giao thông!\n\n"
-            "Khi phát hiện đèn đỏ hoặc vàng, hệ thống sẽ\n"
-            "không cảnh báo kẹt xe để tránh nhầm lẫn."
-        )
-        
-        if self.current_frame is not None:
-            self.display_frame(self.current_frame)
-        
-        self.traffic_light_calibration_complete.emit()
-        logger.info("Traffic light ROI calibration complete")
-    
-    def get_traffic_light_detector(self) -> TrafficLightDetector:
-        """Get traffic light detector instance"""
-        return self.traffic_light_detector
-    
-    def set_traffic_light_roi(self, points: list):
-        """Set traffic light ROI from saved config"""
-        if points and len(points) == 4:
-            self.traffic_light_detector.set_roi([tuple(p) for p in points])
-    
     def closeEvent(self, event):
         """Clean up on close"""
         # Reset calibration state
         self.is_calibrating = False
-        self.is_calibrating_traffic_light = False
         
         self.pause()
         if self.cap:

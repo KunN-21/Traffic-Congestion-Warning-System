@@ -161,15 +161,36 @@ class Benchmarker:
             # Skip warmup frames for timing
             is_warmup = frame_count <= warmup_frames
             
-            # Detection
+            # Detection and Tracking (using YOLO's built-in tracker)
             det_start = time.perf_counter()
             vehicle_types = list(self.settings.VEHICLE_DIMENSIONS.keys())
-            detections = detector.detect(frame, vehicle_types)
+            
+            # Build tracker config from settings
+            tracker_config = {
+                'track_high_thresh': self.settings.tracker.track_high_thresh,
+                'track_low_thresh': self.settings.tracker.track_low_thresh,
+                'new_track_thresh': self.settings.tracker.new_track_thresh,
+                'track_buffer': self.settings.tracker.track_buffer,
+                'match_thresh': self.settings.tracker.match_thresh,
+                'gmc_method': self.settings.tracker.gmc_method,
+                'proximity_thresh': self.settings.tracker.proximity_thresh,
+                'appearance_thresh': self.settings.tracker.appearance_thresh,
+                'with_reid': self.settings.tracker.with_reid,
+            }
+            
+            # Use detect_with_tracking for combined detection + tracking
+            detections = detector.detect_with_tracking(
+                frame, 
+                vehicle_types,
+                tracker_type=self.settings.tracker.tracker_type,
+                persist=True,
+                tracker_config=tracker_config
+            )
             det_time = time.perf_counter() - det_start
             
-            # Tracking
+            # Update tracker state with tracked detections
             track_start = time.perf_counter()
-            _ = tracker.update(detections, frame)  # Update tracker state
+            _ = tracker.update(detections, frame)
             track_time = time.perf_counter() - track_start
             
             # Record metrics (skip warmup)

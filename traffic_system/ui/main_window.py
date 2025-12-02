@@ -244,31 +244,6 @@ class MainWindow(QMainWindow):
         self.btn_calibrate.clicked.connect(self.start_calibration)
         layout.addWidget(self.btn_calibrate)
         
-        # Traffic Light ROI button
-        self.btn_traffic_light = QPushButton("Cài Đặt Đèn GT")
-        self.btn_traffic_light.setMinimumHeight(40)
-        self.btn_traffic_light.setEnabled(False)
-        self.btn_traffic_light.setStyleSheet("""
-            QPushButton {
-                background-color: #cba6f7;
-                color: #1e1e2e;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #ddb6ff;
-            }
-            QPushButton:disabled {
-                background-color: #313244;
-                color: #6c7086;
-            }
-        """)
-        self.btn_traffic_light.clicked.connect(self.start_traffic_light_calibration)
-        layout.addWidget(self.btn_traffic_light)
-        
         # Play/Pause button
         self.btn_play = QPushButton("Phát Video")
         self.btn_play.setMinimumHeight(40)
@@ -637,7 +612,6 @@ class MainWindow(QMainWindow):
         self.video_widget.frame_processed.connect(self.update_statistics)
         self.video_widget.calibration_complete.connect(self.on_calibration_complete)
         self.video_widget.calibration_cancelled.connect(self.on_calibration_cancelled)
-        self.video_widget.traffic_light_calibration_complete.connect(self.on_traffic_light_calibration_complete)
         self.video_widget.position_changed.connect(self.on_video_position_changed)
         
         # Timeline connections
@@ -695,12 +669,8 @@ class MainWindow(QMainWindow):
         
         # Try to load calibration profile
         has_calibration = False
-        has_traffic_light = False
         if self.calibration.load_profile(self.video_name):
             has_calibration = True
-            # Load traffic light ROI if available
-            if self.calibration.calibration and self.calibration.calibration.traffic_light_roi:
-                has_traffic_light = True
             # Sync UI with loaded profile
             num_lanes = self.calibration.get_num_lanes()
             self.combo_num_lanes.blockSignals(True)  # Prevent triggering on_num_lanes_changed
@@ -729,21 +699,12 @@ class MainWindow(QMainWindow):
         # Load video
         self.video_widget.load_video(file_path, self.detector, self.tracker)
         
-        # Set traffic light ROI if available
-        if has_traffic_light:
-            self.video_widget.set_traffic_light_roi(self.calibration.calibration.traffic_light_roi)
-        
         # Show info message
-        if has_calibration or has_traffic_light:
-            msg_parts = []
-            if has_calibration:
-                msg_parts.append("thông số hiệu chỉnh")
-            if has_traffic_light:
-                msg_parts.append("vùng đèn giao thông")
+        if has_calibration:
             QMessageBox.information(
                 self,
                 "Đã tải cấu hình",
-                f"Đã tải {' và '.join(msg_parts)} cho video này."
+                "Đã tải thông số hiệu chỉnh cho video này."
             )
             self.update_calibration_display()
         
@@ -751,11 +712,6 @@ class MainWindow(QMainWindow):
         self.lbl_video.setText(os.path.basename(file_path))
         self.lbl_status.setText("Đã tải video")
         self.btn_calibrate.setEnabled(True)
-        self.btn_traffic_light.setEnabled(True)
-        if has_traffic_light:
-            self.btn_traffic_light.setText("Đã thiết lập đèn GT")
-        else:
-            self.btn_traffic_light.setText("Cài Đặt Đèn GT")
         self.btn_play.setEnabled(self.calibration.calibration is not None)
         self.btn_stop.setEnabled(True)
         
@@ -823,7 +779,6 @@ class MainWindow(QMainWindow):
         self.video_widget.start_calibration()
         self.btn_calibrate.setText("Đang hiệu chỉnh...")
         self.btn_calibrate.setEnabled(False)
-        self.btn_traffic_light.setEnabled(False)
         self.btn_play.setEnabled(False)
         
         # Update current lane display
@@ -843,41 +798,11 @@ class MainWindow(QMainWindow):
         self.lbl_status.setText(f"Đang hiệu chỉnh{lane_info} - Nhấn {required_points} điểm")
         self.statusBar.showMessage(mode_instructions.get(mode, "Đang hiệu chỉnh...") + lane_info)
     
-    def start_traffic_light_calibration(self):
-        """Start traffic light ROI calibration"""
-        if self.video_path is None:
-            QMessageBox.warning(self, "Lỗi", "Vui lòng mở video trước!")
-            return
-        
-        self.video_widget.start_traffic_light_calibration()
-        self.btn_traffic_light.setText("Đang chọn vùng đèn...")
-        self.btn_traffic_light.setEnabled(False)
-        self.btn_calibrate.setEnabled(False)
-        self.btn_play.setEnabled(False)
-        self.lbl_status.setText("Chọn vùng đèn - Nhấn 4 điểm")
-        self.statusBar.showMessage("Nhấn 4 điểm để chọn vùng chứa đèn giao thông")
-    
-    def on_traffic_light_calibration_complete(self):
-        """Called when traffic light ROI calibration is complete"""
-        self.btn_traffic_light.setText("Đã thiết lập đèn GT")
-        self.btn_traffic_light.setEnabled(True)
-        self.btn_calibrate.setEnabled(True)
-        self.btn_play.setEnabled(self.calibration.calibration is not None)
-        self.lbl_status.setText("Đã thiết lập vùng đèn")
-        self.statusBar.showMessage("Vùng đèn giao thông đã được thiết lập!")
-        
-        # Save traffic light ROI to calibration profile
-        if self.video_name and self.calibration.calibration:
-            tl_detector = self.video_widget.get_traffic_light_detector()
-            self.calibration.calibration.traffic_light_roi = tl_detector.get_points()
-            self.calibration.save_profile(self.video_name)
-    
     def on_calibration_cancelled(self):
         """Called when calibration is cancelled by user"""
         self.is_calibrating = False
         self.btn_calibrate.setText("Hiệu Chỉnh Vùng Quan Sát")
         self.btn_calibrate.setEnabled(True)
-        self.btn_traffic_light.setEnabled(True)
         self.btn_play.setEnabled(self.calibration.calibration is not None)
         self.lbl_status.setText("Đã hủy hiệu chỉnh")
         self.statusBar.showMessage("Hiệu chỉnh đã bị hủy. Nhấn nút Hiệu Chỉnh để thử lại.")
@@ -904,7 +829,6 @@ class MainWindow(QMainWindow):
         self.is_calibrating = False
         self.btn_calibrate.setText("Hiệu Chỉnh Lại")
         self.btn_calibrate.setEnabled(True)
-        self.btn_traffic_light.setEnabled(True)
         self.btn_play.setEnabled(True)
         
         # Reset lane display
@@ -1275,7 +1199,6 @@ class MainWindow(QMainWindow):
         # Clean up video widget
         if hasattr(self, 'video_widget'):
             self.video_widget.is_calibrating = False
-            self.video_widget.is_calibrating_traffic_light = False
         
         event.accept()
 
@@ -1367,24 +1290,6 @@ class MainWindow(QMainWindow):
                 }
                 QPushButton:hover {
                     background-color: #f9c096;
-                }
-                QPushButton:disabled {
-                    background-color: #313244;
-                    color: #6c7086;
-                }
-            """
-            traffic_light_btn_style = """
-                QPushButton {
-                    background-color: #cba6f7;
-                    color: #1e1e2e;
-                    border: none;
-                    border-radius: 6px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    padding: 8px 16px;
-                }
-                QPushButton:hover {
-                    background-color: #ddb6ff;
                 }
                 QPushButton:disabled {
                     background-color: #313244;
@@ -1501,24 +1406,6 @@ class MainWindow(QMainWindow):
                     color: #9e9e9e;
                 }
             """
-            traffic_light_btn_style = """
-                QPushButton {
-                    background-color: #9c27b0;
-                    color: #ffffff;
-                    border: none;
-                    border-radius: 6px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    padding: 8px 16px;
-                }
-                QPushButton:hover {
-                    background-color: #7b1fa2;
-                }
-                QPushButton:disabled {
-                    background-color: #e0e0e0;
-                    color: #9e9e9e;
-                }
-            """
             play_btn_style = """
                 QPushButton {
                     background-color: #4caf50;
@@ -1571,8 +1458,6 @@ class MainWindow(QMainWindow):
             self.btn_back.setStyleSheet(back_btn_style)
         if hasattr(self, 'btn_calibrate'):
             self.btn_calibrate.setStyleSheet(calibrate_btn_style)
-        if hasattr(self, 'btn_traffic_light'):
-            self.btn_traffic_light.setStyleSheet(traffic_light_btn_style)
         if hasattr(self, 'btn_play'):
             self.btn_play.setStyleSheet(play_btn_style)
         if hasattr(self, 'btn_stop'):

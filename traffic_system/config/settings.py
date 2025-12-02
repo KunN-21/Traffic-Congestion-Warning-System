@@ -109,7 +109,7 @@ class Settings:
         'motorcycle': VehicleDimensions(length=2.05, width=0.725, height=1.102),
         'bicycle': VehicleDimensions(length=1.75, width=0.6, height=1.05),
         'bus': VehicleDimensions(length=12.1, width=2.6, height=4.1),
-        'car': VehicleDimensions(length=5.8, width=2.1, height=1.3),
+        'car': VehicleDimensions(length=3.7, width=2.1, height=1.3),
         'truck': VehicleDimensions(length=9.1, width=2.6, height=4.1),
     }
     

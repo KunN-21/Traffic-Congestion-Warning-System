@@ -17,7 +17,7 @@
     "track_buffer": 30,
     "match_thresh": 0.6,
     "fuse_score": true,
-    "gmc_method": "None",
+    "gmc_method": "sparseOptFlow",
     "proximity_thresh": 0.5,
     "appearance_thresh": 0.25,
     "with_reid": true,
