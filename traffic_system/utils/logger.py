@@ -4,9 +4,24 @@ Provides centralized logging with file and console output
 """
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+
+def _get_logs_path() -> Path:
+    """Get path for logs directory (handles PyInstaller)"""
+    if getattr(sys, 'frozen', False):
+        # When packaged, use directory containing the executable
+        base = Path(sys.executable).parent
+    else:
+        # When running from source
+        base = Path(__file__).parent.parent.parent
+    
+    logs_path = base / "logs"
+    logs_path.mkdir(exist_ok=True)
+    return logs_path
 
 
 class TrafficLogger:
@@ -32,9 +47,6 @@ class TrafficLogger:
     LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s"
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     
-    # Default log directory
-    DEFAULT_LOG_DIR = "logs"
-    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -46,8 +58,7 @@ class TrafficLogger:
             return
         
         self._initialized = True
-        self.log_dir = Path(self.DEFAULT_LOG_DIR)
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir = _get_logs_path()
         
         # Create log file with date
         self.log_file = self.log_dir / f"traffic_system_{datetime.now().strftime('%Y%m%d')}.log"

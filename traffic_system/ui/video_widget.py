@@ -342,8 +342,21 @@ class VideoWidget(QWidget):
                     'congestion_status': lane_status,
                     'congestion_color': lane_color
                 }
+            
+            # Calculate average density for multi-lane: (lane1 + lane2 + ...) / num_lanes
+            if lane_densities:
+                total_lane_density = sum(
+                    lane_data['density_percentage'] 
+                    for lane_data in lane_densities.values()
+                )
+                density_percentage = total_lane_density / len(lane_densities)
+                
+                # Recalculate congestion level based on average density
+                level_name, status_text, color_bgr = self.density_calculator.get_density_level(
+                    density_percentage
+                )
         
-        # Determine congestion status
+        # Determine congestion status (for single lane or fallback)
         level_name, status_text, color_bgr = self.density_calculator.get_density_level(
             density_percentage
         )
@@ -591,13 +604,15 @@ class VideoWidget(QWidget):
             mode = self.calibration.get_mode()
             logger.debug(f"Finishing calibration, mode: {mode}, points: {len(self.calibration.get_points())}")
             
-            # For circle mode, ask for outer and inner radii
-            if mode == CalibrationMode.CIRCLE:
+            # For circle/ellipse mode (roundabout), ask for outer and inner radii
+            if mode in (CalibrationMode.CIRCLE, CalibrationMode.ELLIPSE):
+                shape_name = "vòng xoay" if mode == CalibrationMode.CIRCLE else "vòng xoay elip"
+                
                 # Ask for outer radius (r1)
                 radius_outer, ok = QInputDialog.getDouble(
                     self,
                     "Bán kính ngoài (r1)",
-                    "Nhập bán kính ngoài r1 của vòng xoay (m):",
+                    f"Nhập bán kính ngoài r1 của {shape_name} (m):",
                     15.0,  # Default outer radius
                     0.1, 500.0, 1
                 )
@@ -610,7 +625,7 @@ class VideoWidget(QWidget):
                 radius_inner, ok = QInputDialog.getDouble(
                     self,
                     "Bán kính trong (r2)",
-                    f"Nhập bán kính trong r2 của vòng xoay (m):\n(Phải nhỏ hơn r1 = {radius_outer:.1f}m)",
+                    f"Nhập bán kính trong r2 của {shape_name} (m):\n(Phải nhỏ hơn r1 = {radius_outer:.1f}m)",
                     5.0,  # Default inner radius
                     0.0, radius_outer - 0.1, 1
                 )
@@ -619,11 +634,11 @@ class VideoWidget(QWidget):
                     self._cancel_calibration()
                     return
                 
-                # Calculate area: π(r1² - r2²)
+                # Calculate area: π(r1² - r2²) - same formula for circle and ellipse
                 import math
                 road_area = math.pi * (radius_outer**2 - radius_inner**2)
                 
-                # Use new method with radii
+                # Use method with radii
                 success = self.calibration.finalize_calibration_with_radii(radius_outer, radius_inner)
                 
                 if success:
@@ -637,17 +652,12 @@ class VideoWidget(QWidget):
                     QMessageBox.warning(
                         self,
                         "Lỗi Hiệu Chỉnh",
-                        "Không thể hoàn thành hiệu chỉnh vòng tròn.\nVui lòng thử lại."
+                        f"Không thể hoàn thành hiệu chỉnh {shape_name}.\nVui lòng thử lại."
                     )
                     self._cancel_calibration()
                 return
             
-            # For other modes, ask for dimensions
-            if mode == CalibrationMode.ELLIPSE:
-                length_prompt = "Nhập chiều dài trục chính (a) tính bằng mét:"
-                length_title = "Trục chính elip (a)"
-                width_prompt = "Nhập chiều dài trục phụ (b) tính bằng mét:"
-                width_title = "Trục phụ elip (b)"
+            # For polygon mode, ask for dimensions
             else:
                 length_prompt = "Nhập chiều dài thực tế (Ls) tính bằng mét:"
                 length_title = "Chiều dài đường (Ls)"

@@ -95,18 +95,10 @@ System Requirements
 - OpenCV >= 4.8.0
 - CUDA (recommended for GPU acceleration)
 
-Author
-------
-Traffic Monitoring Team - 2025
 
-License
--------
-© 2025 Traffic Monitoring Team. All rights reserved.
 """
 
 __version__ = "1.0.0"
-__author__ = "Traffic Monitoring Team"
-__email__ = "team@example.com"
 
 # Import main components for easier access
 from .config.settings import Settings

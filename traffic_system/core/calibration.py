@@ -376,13 +376,12 @@ class CalibrationManager:
             return False
         
         # Calculate road area based on mode
-        if self.mode == CalibrationMode.CIRCLE:
-            # For circle, use πr² with real-world dimensions
-            road_area = road_length * road_width  # User provides diameter as length/width
-        elif self.mode == CalibrationMode.ELLIPSE:
-            # For ellipse, use π*a*b
-            road_area = road_length * road_width
+        if self.mode in (CalibrationMode.CIRCLE, CalibrationMode.ELLIPSE):
+            # For circle/ellipse roundabout, use π(r1² - r2²) annulus formula
+            # road_length = r1 (outer radius), road_width = r2 (inner radius)
+            road_area = np.pi * (road_length**2 - road_width**2)
         else:
+            # For polygon mode, use simple length × width
             road_area = road_length * road_width
         
         # Create polygon for this lane
@@ -684,6 +683,65 @@ class CalibrationManager:
             return self.calibration.road_area_meters
         
         return 0.0
+    
+    def update_lane_parameters(self, lane_number: int, param1: float, param2: float) -> bool:
+        """
+        Update calibration parameters for a specific lane
+        
+        Args:
+            lane_number: Lane number (1-based)
+            param1: First parameter (road_length/radius_outer)
+            param2: Second parameter (road_width/radius_inner)
+        
+        Returns:
+            True if successful
+        """
+        if not self.calibration:
+            logger.warning("No calibration data to update")
+            return False
+        
+        mode = self.calibration.calibration_mode
+        
+        # Calculate new area based on mode
+        if mode in ("circle", "ellipse"):
+            # Annulus formula: π(r1² - r2²)
+            new_area = np.pi * (param1**2 - param2**2)
+        else:
+            # Rectangle formula: length × width
+            new_area = param1 * param2
+        
+        # Update lane data if exists
+        if self.calibration.lanes and len(self.calibration.lanes) >= lane_number:
+            lane_idx = lane_number - 1
+            self.calibration.lanes[lane_idx]['road_length_meters'] = param1
+            self.calibration.lanes[lane_idx]['road_width_meters'] = param2
+            self.calibration.lanes[lane_idx]['road_area_meters'] = new_area
+            
+            # Also update lanes_data for internal tracking
+            if self.lanes_data and len(self.lanes_data) >= lane_number:
+                self.lanes_data[lane_idx]['road_length_meters'] = param1
+                self.lanes_data[lane_idx]['road_width_meters'] = param2
+                self.lanes_data[lane_idx]['road_area_meters'] = new_area
+            
+            # Recalculate total area
+            total_area = sum(lane['road_area_meters'] for lane in self.calibration.lanes)
+            self.calibration.road_area_meters = total_area
+            
+            logger.info(f"Lane {lane_number} updated: param1={param1:.2f}, param2={param2:.2f}, area={new_area:.2f}")
+        else:
+            # Single lane or first lane
+            self.calibration.road_length_meters = param1
+            self.calibration.road_width_meters = param2
+            self.calibration.road_area_meters = new_area
+            
+            # Update radius fields for circle/ellipse
+            if mode in ("circle", "ellipse"):
+                self.calibration.radius_outer = param1
+                self.calibration.radius_inner = param2
+            
+            logger.info(f"Calibration updated: param1={param1:.2f}, param2={param2:.2f}, area={new_area:.2f}")
+        
+        return True
     
     def get_points(self) -> List[Tuple[int, int]]:
         """Get calibration points"""

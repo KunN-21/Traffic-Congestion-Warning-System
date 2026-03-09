@@ -6,7 +6,7 @@ PyQt6-based GUI application with enhanced features
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QFileDialog, QMessageBox,
                              QGroupBox, QGridLayout, QStatusBar, QTabWidget,
-                             QStackedWidget, QComboBox)
+                             QStackedWidget, QComboBox, QInputDialog)
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
 import os
@@ -47,7 +47,8 @@ class MainWindow(QMainWindow):
         # Initialize components
         self.detector = None
         self.tracker = None
-        self.calibration = CalibrationManager(self.settings.calibration.profiles_dir)
+        # Use absolute path for calibration profiles
+        self.calibration = CalibrationManager(self.settings.calibration.get_absolute_profiles_dir())
         self.density_calculator = DensityCalculator(self.settings)
         
         # Video path
@@ -372,9 +373,9 @@ class MainWindow(QMainWindow):
         row = 0
         for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
             label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
-            label.setStyleSheet("font-size: 14px; font-weight: bold;")
+            label.setStyleSheet("font-size: 16px; font-weight: bold;")
             count = QLabel("0")
-            count.setStyleSheet("font-size: 16px; font-weight: bold; color: #a6e3a1;")
+            count.setStyleSheet("font-size: 18px; font-weight: bold; color: #a6e3a1;")
             vehicle1_layout.addWidget(label, row, 0)
             vehicle1_layout.addWidget(count, row, 1)
             self.lbl_lane1_counts[vehicle_type] = count
@@ -382,7 +383,7 @@ class MainWindow(QMainWindow):
         
         # Lane 1 density status
         lbl = QLabel("Mật độ giao thông:")
-        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        lbl.setStyleSheet("font-size: 18px; font-weight: bold;")
         vehicle1_layout.addWidget(lbl, row, 0)
         
         # Status and ratio in horizontal layout
@@ -392,11 +393,11 @@ class MainWindow(QMainWindow):
         lane1_status_layout.setSpacing(10)
         
         self.lbl_lane1_status = QLabel("-")
-        self.lbl_lane1_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.lbl_lane1_status.setStyleSheet("font-size: 18px; font-weight: bold;")
         lane1_status_layout.addWidget(self.lbl_lane1_status)
         
         self.lbl_lane1_ratio = QLabel("0.0%")
-        self.lbl_lane1_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        self.lbl_lane1_ratio.setStyleSheet("font-size: 18px; font-weight: bold; color: #89b4fa;")
         lane1_status_layout.addWidget(self.lbl_lane1_ratio)
         
         lane1_status_layout.addStretch()
@@ -413,9 +414,9 @@ class MainWindow(QMainWindow):
         row = 0
         for vehicle_type in ['motorcycle', 'bicycle', 'car', 'bus', 'truck']:
             label = QLabel(f"{vehicle_names.get(vehicle_type, vehicle_type)}:")
-            label.setStyleSheet("font-size: 14px; font-weight: bold;")
+            label.setStyleSheet("font-size: 16px; font-weight: bold;")
             count = QLabel("0")
-            count.setStyleSheet("font-size: 16px; font-weight: bold; color: #fab387;")
+            count.setStyleSheet("font-size: 18px; font-weight: bold; color: #fab387;")
             vehicle2_layout.addWidget(label, row, 0)
             vehicle2_layout.addWidget(count, row, 1)
             self.lbl_lane2_counts[vehicle_type] = count
@@ -423,7 +424,7 @@ class MainWindow(QMainWindow):
         
         # Lane 2 density status
         lbl = QLabel("Mật độ giao thông:")
-        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        lbl.setStyleSheet("font-size: 18px; font-weight: bold;")
         vehicle2_layout.addWidget(lbl, row, 0)
         
         # Status and ratio in horizontal layout
@@ -433,11 +434,11 @@ class MainWindow(QMainWindow):
         lane2_status_layout.setSpacing(10)
         
         self.lbl_lane2_status = QLabel("-")
-        self.lbl_lane2_status.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.lbl_lane2_status.setStyleSheet("font-size: 18px; font-weight: bold;")
         lane2_status_layout.addWidget(self.lbl_lane2_status)
         
         self.lbl_lane2_ratio = QLabel("0.0%")
-        self.lbl_lane2_ratio.setStyleSheet("font-size: 14px; font-weight: bold; color: #89b4fa;")
+        self.lbl_lane2_ratio.setStyleSheet("font-size: 18px; font-weight: bold; color: #89b4fa;")
         lane2_status_layout.addWidget(self.lbl_lane2_ratio)
         
         lane2_status_layout.addStretch()
@@ -511,9 +512,9 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(info_group)
         
-        # Calibration info
-        calib_group = QGroupBox("Thông Số Hiệu Chỉnh")
-        calib_layout = QGridLayout(calib_group)
+        # Calibration info - Lane 1
+        self.calib_lane1_group = QGroupBox("Thông Số Hiệu Chỉnh - Làn 1")
+        calib_layout = QGridLayout(self.calib_lane1_group)
         calib_layout.setSpacing(8)
         
         # First parameter label (length/radius/major axis)
@@ -539,7 +540,52 @@ class MainWindow(QMainWindow):
         self.lbl_area.setStyleSheet("font-size: 16px;")
         calib_layout.addWidget(self.lbl_area, 2, 1)
         
-        layout.addWidget(calib_group)
+        # Edit button for Lane 1
+        self.btn_edit_lane1 = QPushButton("Chỉnh Sửa")
+        self.btn_edit_lane1.setStyleSheet("font-size: 14px; padding: 5px 10px;")
+        self.btn_edit_lane1.clicked.connect(lambda: self.edit_lane_calibration(1))
+        self.btn_edit_lane1.setEnabled(False)
+        calib_layout.addWidget(self.btn_edit_lane1, 3, 0, 1, 2)
+        
+        layout.addWidget(self.calib_lane1_group)
+        
+        # Calibration info - Lane 2 (initially hidden)
+        self.calib_lane2_group = QGroupBox("Thông Số Hiệu Chỉnh - Làn 2")
+        calib_layout2 = QGridLayout(self.calib_lane2_group)
+        calib_layout2.setSpacing(8)
+        
+        # Lane 2 - First parameter label
+        self.lbl_param1_title_lane2 = QLabel("Chiều dài Ls (m):")
+        self.lbl_param1_title_lane2.setStyleSheet("font-size: 16px; font-weight: bold;")
+        calib_layout2.addWidget(self.lbl_param1_title_lane2, 0, 0)
+        self.lbl_length_lane2 = QLabel("-")
+        self.lbl_length_lane2.setStyleSheet("font-size: 16px;")
+        calib_layout2.addWidget(self.lbl_length_lane2, 0, 1)
+        
+        # Lane 2 - Second parameter label
+        self.lbl_param2_title_lane2 = QLabel("Chiều rộng Ws (m):")
+        self.lbl_param2_title_lane2.setStyleSheet("font-size: 16px; font-weight: bold;")
+        calib_layout2.addWidget(self.lbl_param2_title_lane2, 1, 0)
+        self.lbl_width_lane2 = QLabel("-")
+        self.lbl_width_lane2.setStyleSheet("font-size: 16px;")
+        calib_layout2.addWidget(self.lbl_width_lane2, 1, 1)
+        
+        lbl2 = QLabel("Diện tích DT (m²):")
+        lbl2.setStyleSheet("font-size: 16px; font-weight: bold;")
+        calib_layout2.addWidget(lbl2, 2, 0)
+        self.lbl_area_lane2 = QLabel("-")
+        self.lbl_area_lane2.setStyleSheet("font-size: 16px;")
+        calib_layout2.addWidget(self.lbl_area_lane2, 2, 1)
+        
+        # Edit button for Lane 2
+        self.btn_edit_lane2 = QPushButton("Chỉnh Sửa")
+        self.btn_edit_lane2.setStyleSheet("font-size: 14px; padding: 5px 10px;")
+        self.btn_edit_lane2.clicked.connect(lambda: self.edit_lane_calibration(2))
+        self.btn_edit_lane2.setEnabled(False)
+        calib_layout2.addWidget(self.btn_edit_lane2, 3, 0, 1, 2)
+        
+        self.calib_lane2_group.setVisible(False)  # Hidden by default
+        layout.addWidget(self.calib_lane2_group)
         
         # Density info
         density_group = QGroupBox("Mật Độ Giao Thông")
@@ -731,8 +777,10 @@ class MainWindow(QMainWindow):
     
     def initialize_detector_tracker(self):
         """Initialize detector and tracker with current settings"""
+        # Use absolute path for model
+        model_path = self.settings.model.get_absolute_model_path()
         self.detector = VehicleDetector(
-            model_path=self.settings.model.model_path,
+            model_path=model_path,
             conf_threshold=self.settings.model.conf_threshold,
             iou_threshold=self.settings.model.iou_threshold,
             conf_filter=self.settings.model.detection_conf_filter
@@ -867,11 +915,19 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Hoàn Tất", msg)
     
     def update_calibration_display(self):
-        """Update calibration display based on calibration mode"""
+        """Update calibration display based on calibration mode and number of lanes"""
         if self.calibration.calibration:
             cal = self.calibration.calibration
+            num_lanes = getattr(cal, 'num_lanes', 1)
+            lanes = getattr(cal, 'lanes', None)
             
-            # Update labels based on calibration mode
+            # Update Lane 1 title based on number of lanes
+            if num_lanes > 1:
+                self.calib_lane1_group.setTitle("Thông Số Hiệu Chỉnh - Làn 1")
+            else:
+                self.calib_lane1_group.setTitle("Thông Số Hiệu Chỉnh")
+            
+            # Update labels based on calibration mode for Lane 1
             if cal.calibration_mode == "circle":
                 # Circle mode - show outer and inner radii
                 if cal.radius_outer is not None and cal.radius_inner is not None:
@@ -902,12 +958,134 @@ class MainWindow(QMainWindow):
                 # Polygon mode - show length and width
                 self.lbl_param1_title.setText("Chiều dài Ls (m):")
                 self.lbl_param2_title.setText("Chiều rộng Ws (m):")
-                self.lbl_length.setText(f"{cal.road_length_meters:.2f} m")
+                
+                # If multi-lane with lanes data, show lane 1 specific data
+                if lanes and len(lanes) >= 1:
+                    lane1 = lanes[0]
+                    self.lbl_length.setText(f"{lane1.get('road_length_meters', cal.road_length_meters):.2f} m")
+                    self.lbl_width.setText(f"{lane1.get('road_width_meters', cal.road_width_meters):.2f} m")
+                    self.lbl_area.setText(f"{lane1.get('road_area_meters', cal.road_area_meters):.2f} m²")
+                else:
+                    self.lbl_length.setText(f"{cal.road_length_meters:.2f} m")
+                    self.lbl_width.setText(f"{cal.road_width_meters:.2f} m")
+                    self.lbl_area.setText(f"{cal.road_area_meters:.2f} m²")
+                
                 self.lbl_param2_title.setVisible(True)
                 self.lbl_width.setVisible(True)
-                self.lbl_width.setText(f"{cal.road_width_meters:.2f} m")
             
-            self.lbl_area.setText(f"{cal.road_area_meters:.2f} m²")
+            # Update area for non-polygon modes
+            if cal.calibration_mode != "polygon" or not lanes or len(lanes) < 1:
+                self.lbl_area.setText(f"{cal.road_area_meters:.2f} m²")
+            
+            # Handle Lane 2 display
+            if num_lanes >= 2 and lanes and len(lanes) >= 2:
+                self.calib_lane2_group.setVisible(True)
+                lane2 = lanes[1]
+                
+                # Update Lane 2 labels based on mode
+                if cal.calibration_mode == "circle":
+                    self.lbl_param1_title_lane2.setText("Bán kính ngoài r1 (m):")
+                    self.lbl_param2_title_lane2.setText("Bán kính trong r2 (m):")
+                    self.lbl_length_lane2.setText(f"{lane2.get('road_length_meters', 0):.2f} m")
+                    self.lbl_width_lane2.setText(f"{lane2.get('road_width_meters', 0):.2f} m")
+                elif cal.calibration_mode == "ellipse":
+                    self.lbl_param1_title_lane2.setText("Trục chính (m):")
+                    self.lbl_param2_title_lane2.setText("Trục phụ (m):")
+                    self.lbl_length_lane2.setText(f"{lane2.get('road_length_meters', 0):.2f} m")
+                    self.lbl_width_lane2.setText(f"{lane2.get('road_width_meters', 0):.2f} m")
+                else:
+                    self.lbl_param1_title_lane2.setText("Chiều dài Ls (m):")
+                    self.lbl_param2_title_lane2.setText("Chiều rộng Ws (m):")
+                    self.lbl_length_lane2.setText(f"{lane2.get('road_length_meters', 0):.2f} m")
+                    self.lbl_width_lane2.setText(f"{lane2.get('road_width_meters', 0):.2f} m")
+                
+                self.lbl_area_lane2.setText(f"{lane2.get('road_area_meters', 0):.2f} m²")
+                self.btn_edit_lane2.setEnabled(True)
+            else:
+                self.calib_lane2_group.setVisible(False)
+                self.btn_edit_lane2.setEnabled(False)
+            
+            # Enable edit button for Lane 1
+            self.btn_edit_lane1.setEnabled(True)
+        else:
+            # No calibration - disable edit buttons
+            self.btn_edit_lane1.setEnabled(False)
+            self.btn_edit_lane2.setEnabled(False)
+    
+    def edit_lane_calibration(self, lane_number: int):
+        """Edit calibration parameters for a specific lane"""
+        if not self.calibration.calibration:
+            QMessageBox.warning(self, "Lỗi", "Chưa có dữ liệu hiệu chỉnh!")
+            return
+        
+        cal = self.calibration.calibration
+        mode = cal.calibration_mode
+        lanes = getattr(cal, 'lanes', None)
+        
+        # Get current values for this lane
+        if lanes and len(lanes) >= lane_number:
+            lane_data = lanes[lane_number - 1]
+            current_length = lane_data.get('road_length_meters', cal.road_length_meters)
+            current_width = lane_data.get('road_width_meters', cal.road_width_meters)
+        else:
+            current_length = cal.road_length_meters
+            current_width = cal.road_width_meters
+        
+        # Determine labels based on mode
+        if mode in ("circle", "ellipse"):
+            param1_label = "Bán kính ngoài r1 (m):"
+            param2_label = "Bán kính trong r2 (m):"
+            title = f"Chỉnh Sửa Thông Số Vòng Xoay - Làn {lane_number}"
+        else:
+            param1_label = "Chiều dài Ls (m):"
+            param2_label = "Chiều rộng Ws (m):"
+            title = f"Chỉnh Sửa Thông Số - Làn {lane_number}"
+        
+        # Ask for first parameter
+        new_length, ok = QInputDialog.getDouble(
+            self, title, param1_label,
+            current_length, 0.1, 1000.0, 2
+        )
+        if not ok:
+            return
+        
+        # Ask for second parameter
+        if mode in ("circle", "ellipse"):
+            # For circle/ellipse, r2 must be less than r1
+            new_width, ok = QInputDialog.getDouble(
+                self, title, f"{param2_label}\n(Phải nhỏ hơn r1 = {new_length:.2f}m)",
+                current_width, 0.0, new_length - 0.1, 2
+            )
+        else:
+            new_width, ok = QInputDialog.getDouble(
+                self, title, param2_label,
+                current_width, 0.1, 500.0, 2
+            )
+        if not ok:
+            return
+        
+        # Update calibration
+        success = self.calibration.update_lane_parameters(
+            lane_number, new_length, new_width
+        )
+        
+        if success:
+            # Save profile
+            if self.video_name:
+                self.calibration.save_profile(self.video_name)
+            
+            # Update display
+            self.update_calibration_display()
+            
+            QMessageBox.information(
+                self, "Thành Công",
+                f"Đã cập nhật thông số làn {lane_number}!"
+            )
+        else:
+            QMessageBox.warning(
+                self, "Lỗi",
+                f"Không thể cập nhật thông số làn {lane_number}!"
+            )
     
     def toggle_play(self):
         """Toggle play/pause"""

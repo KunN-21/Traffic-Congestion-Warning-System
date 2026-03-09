@@ -5,18 +5,34 @@ Centralized configuration for the traffic monitoring system
 
 import json
 import os
+import sys
 import logging
 from dataclasses import dataclass, asdict
 from typing import Dict, Tuple
+from pathlib import Path
 
 # Use standard logging here to avoid circular import
 logger = logging.getLogger("traffic_system.config.settings")
 
 
+def _get_base_path() -> Path:
+    """Get base path for resources (handles PyInstaller)"""
+    if getattr(sys, 'frozen', False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).parent.parent.parent
+
+
+def _get_user_data_path() -> Path:
+    """Get path for user data (logs, profiles)"""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent.parent
+
+
 @dataclass
 class ModelConfig:
     """YOLO Model Configuration"""
-    model_path: str = "Model/best.pt"
+    model_path: str = "Model/best_v2.pt"  # Relative path, resolved at runtime
     conf_threshold: float = 0.6
     iou_threshold: float = 0.6
     detection_conf_filter: float = 0.4
@@ -24,6 +40,12 @@ class ModelConfig:
     half: bool = True  # Use FP16 inference
     max_det: int = 100  # Maximum detections per frame
     agnostic_nms: bool = True  # Class-agnostic NMS
+    
+    def get_absolute_model_path(self) -> str:
+        """Get absolute path to model file"""
+        if os.path.isabs(self.model_path):
+            return self.model_path
+        return str(_get_base_path() / self.model_path)
 
 
 @dataclass
@@ -66,7 +88,15 @@ class CalibrationConfig:
     default_road_width: float = 10.0   # Ws in meters
     use_perspective_transform: bool = True
     enable_save: bool = True
-    profiles_dir: str = "calibration_profiles"
+    profiles_dir: str = "calibration_profiles"  # Relative path, resolved at runtime
+    
+    def get_absolute_profiles_dir(self) -> str:
+        """Get absolute path to profiles directory"""
+        if os.path.isabs(self.profiles_dir):
+            return self.profiles_dir
+        profiles_path = _get_user_data_path() / self.profiles_dir
+        profiles_path.mkdir(parents=True, exist_ok=True)
+        return str(profiles_path)
 
 
 @dataclass
@@ -107,10 +137,10 @@ class Settings:
     # Vietnamese Vehicle Dimensions (Standard)
     VEHICLE_DIMENSIONS = {
         'motorcycle': VehicleDimensions(length=2.05, width=0.725, height=1.102),
-        'bicycle': VehicleDimensions(length=1.75, width=0.6, height=1.05),
-        'bus': VehicleDimensions(length=12.1, width=2.6, height=4.1),
-        'car': VehicleDimensions(length=3.7, width=2.1, height=1.3),
-        'truck': VehicleDimensions(length=9.1, width=2.6, height=4.1),
+        'bicycle': VehicleDimensions(length=1.7, width=0.6, height=1.05),
+        'bus': VehicleDimensions(length=12.19, width=2.5, height=3.2),
+        'car': VehicleDimensions(length=3.965, width=1.720, height=1.58),
+        'truck': VehicleDimensions(length=9.14, width=2.44, height=4),
     }
     
     # Vehicle Colors (BGR format for OpenCV)
@@ -137,7 +167,11 @@ class Settings:
     
     def __init__(self, config_file: str = None):
         """Initialize settings"""
-        self.config_file = config_file or "traffic_system/config/default_config.json"
+        # Resolve config file path
+        if config_file:
+            self.config_file = config_file
+        else:
+            self.config_file = str(_get_base_path() / "traffic_system" / "config" / "default_config.json")
         
         # Initialize configurations
         self.model = ModelConfig()

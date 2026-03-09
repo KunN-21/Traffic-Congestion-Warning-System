@@ -1,7 +1,7 @@
 {
   "model": {
     "model_path": "Model/best_v2.pt",
-    "conf_threshold": 0.5,
+    "conf_threshold": 0.45,
     "iou_threshold": 0.5,
     "detection_conf_filter": 0.4,
     "imgsz": 640,
@@ -11,17 +11,17 @@
   },
   "tracker": {
     "tracker_type": "botsort",
-    "track_high_thresh": 0.5,
-    "track_low_thresh": 0.1,
-    "new_track_thresh": 0.6,
-    "track_buffer": 30,
-    "match_thresh": 0.6,
+    "track_high_thresh": 0.6,
+    "track_low_thresh": 0.15,
+    "new_track_thresh": 0.65,
+    "track_buffer": 45,
+    "match_thresh": 0.7,
     "fuse_score": true,
     "gmc_method": "sparseOptFlow",
-    "proximity_thresh": 0.5,
-    "appearance_thresh": 0.25,
+    "proximity_thresh": 0.6,
+    "appearance_thresh": 0.3,
     "with_reid": true,
-    "reid_model": "yolo11m-cls.pt"
+    "reid_model": "yolo11l-cls.pt"
   },
   "calibration": {
     "require_real_dimensions": true,

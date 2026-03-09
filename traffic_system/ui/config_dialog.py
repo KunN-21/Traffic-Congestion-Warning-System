@@ -367,9 +367,11 @@ class ConfigDialog(QDialog):
         # ReID Model
         self.combo_reid_model = QComboBox()
         self.combo_reid_model.addItem("Tự động (Native YOLO features)", "auto")
-        self.combo_reid_model.addItem("YOLO11n-cls (Nhỏ, nhanh)", "yolo11n-cls.pt")
-        self.combo_reid_model.addItem("YOLO11s-cls (Cân bằng)", "yolo11s-cls.pt")
-        self.combo_reid_model.addItem("YOLO11m-cls (Chính xác)", "yolo11m-cls.pt")
+        self.combo_reid_model.addItem("YOLO11n-cls (Nhỏ nhất, nhanh nhất)", "yolo11n-cls.pt")
+        self.combo_reid_model.addItem("YOLO11s-cls (Nhỏ, nhanh)", "yolo11s-cls.pt")
+        self.combo_reid_model.addItem("YOLO11m-cls (Trung bình, cân bằng)", "yolo11m-cls.pt")
+        self.combo_reid_model.addItem("YOLO11l-cls (Lớn, chính xác cao)", "yolo11l-cls.pt")
+        self.combo_reid_model.addItem("YOLO11x-cls (Lớn nhất, chính xác nhất)", "yolo11x-cls.pt")
         current_reid_model = getattr(self.settings.tracker, 'reid_model', 'auto')
         idx = self.combo_reid_model.findData(current_reid_model)
         if idx >= 0:
