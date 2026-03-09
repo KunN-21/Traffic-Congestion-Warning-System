@@ -102,7 +102,9 @@ Mật độ giao thông được tính dựa trên tỷ lệ diện tích chiế
 
 ### Công thức chính
 
-$$R = \frac{TL}{DT} \times 100 \quad (\%)$$
+$$R = \frac{TL}{DT} \times 100$$
+
+*(Đơn vị: %)*
 
 Trong đó:
 - **R**: Tỷ lệ mật độ giao thông (%)
@@ -408,4 +410,5 @@ Dự án được phát triển cho mục đích học tập và nghiên cứu.
   <b>🚦 Traffic Congestion Warning System</b><br>
   <i>Hệ Thống Cảnh Báo Ùn Tắc Giao Thông</i><br>
   <sub>Built with ❤️ using Python, YOLOv11, BoT-SORT & PyQt6</sub>
+
 </p>
